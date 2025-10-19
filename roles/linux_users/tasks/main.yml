@@ -1,0 +1,27 @@
+---
+# Rol: linux_users
+# Objetivo: crear usuarios para el laboratorio y ajustar permisos básicos.
+
+- name: Mostrar usuarios actuales (archivo /etc/passwd)
+  command: cut -d: -f1 /etc/passwd
+  register: users_list
+
+- name: Mostrar usuarios (debug)
+  debug:
+    var: users_list.stdout_lines[:30]
+
+- name: Crear usuario 'lab_student' si no existe
+  ansible.builtin.user:
+    name: lab_student
+    comment: "Cuenta de estudiante para prácticas"
+    shell: /bin/bash
+    state: present
+    groups: sudo
+
+- name: Crear carpeta compartida /home/lab_shared y asignar permisos
+  file:
+    path: /home/lab_shared
+    state: directory
+    owner: lab_student
+    group: lab_student
+    mode: '0750'

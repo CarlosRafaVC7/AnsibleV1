@@ -1,0 +1,37 @@
+---
+# Rol: linux_services
+# Objetivo: revisar procesos y servicios esenciales en máquinas Linux.
+
+- name: Ejecutar 'ps aux' para listar procesos
+  # ps aux muestra una tabla de procesos: usuario, PID, %CPU, %MEM, comando
+  command: ps aux
+  register: ps_out
+
+- name: Mostrar los primeros 15 procesos (salida de ps aux)
+  debug:
+    msg: "{{ ps_out.stdout_lines[:15] }}"
+
+- name: Tomar snapshot con 'top' (batch 1 iteración)
+  # 'top -b -n1' da lista con uso de CPU/mem por proceso en ese instante
+  command: top -b -n1 | head -n 15
+  register: top_out
+
+- name: Mostrar snapshot de top
+  debug:
+    var: top_out.stdout_lines
+
+- name: Listar servicios systemd en estado running
+  command: systemctl list-units --type=service --state=running --no-pager
+  register: svc_out
+  failed_when: false
+
+- name: Mostrar lista de servicios (primeras 20 líneas)
+  debug:
+    var: svc_out.stdout_lines[:20]
+
+- name: Asegurar servicio cron (ejemplo) esté activo (Debian/Ubuntu)
+  ansible.builtin.service:
+    name: cron
+    state: started
+    enabled: yes
+  when: ansible_facts['os_family'] == 'Debian'

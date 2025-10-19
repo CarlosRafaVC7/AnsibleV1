@@ -1,0 +1,12 @@
+---
+# Playbook: Administración del almacenamiento y sistemas de archivos
+- name: Comprobar y preparar almacenamiento en Linux
+  hosts: academico
+  become: yes
+  roles:
+    - linux_storage
+
+- name: Comprobar almacenamiento en Windows
+  hosts: gamer
+  roles:
+    - windows_storage

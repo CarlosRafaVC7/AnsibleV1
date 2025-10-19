@@ -1,0 +1,12 @@
+---
+# Playbook: Administración de usuarios y permisos
+- name: Administrar usuarios en Linux (Académico)
+  hosts: academico
+  become: yes
+  roles:
+    - linux_users
+
+- name: Administrar usuarios en Windows (Gamer)
+  hosts: gamer
+  roles:
+    - windows_users

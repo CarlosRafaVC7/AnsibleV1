@@ -1,0 +1,21 @@
+---
+# Rol: windows_services
+# Objetivo: revisar servicios en Windows y mostrar procesos básicos.
+
+- name: Listar servicios en ejecución (Get-Service)
+  win_shell: |
+    Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 20 | Format-Table -AutoSize
+  register: win_services
+
+- name: Mostrar servicios Windows (salida cruda)
+  debug:
+    var: win_services.stdout_lines
+
+- name: Listar procesos top (Get-Process ordenado por CPU)
+  win_shell: |
+    Get-Process | Sort-Object -Property CPU -Descending | Select-Object -First 10 | Format-Table -AutoSize
+  register: win_procs
+
+- name: Mostrar procesos Windows
+  debug:
+    var: win_procs.stdout_lines

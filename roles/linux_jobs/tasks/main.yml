@@ -1,0 +1,25 @@
+---
+# Rol: linux_jobs
+# Objetivo: programar tareas con cron para monitoreo automático.
+
+- name: Crear carpeta de logs para monitoreo si no existe
+  file:
+    path: /var/log/ansible_monitor
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name:Crear cron: registrar uso de memoria cada 1 minuto
+  cron:
+    name: "Registrar uso de memoria"
+    minute: "*/1"
+    job: "free -h >> /var/log/ansible_monitor/memoria.log 2>&1"
+    state: present
+
+- name:Crear cron: registrar uso de disco cada 5 minutos
+  cron:
+    name: "Registrar uso de disco"
+    minute: "*/5"
+    job: "df -h >> /var/log/ansible_monitor/df.log 2>&1"
+    state: present

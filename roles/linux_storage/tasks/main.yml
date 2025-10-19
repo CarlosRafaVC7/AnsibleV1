@@ -1,0 +1,37 @@
+---
+# Rol: linux_storage
+# Objetivo: comprobar espacio en disco y preparar puntos de montaje.
+
+- name: Mostrar uso de disco con 'df -h'
+  command: df -h
+  register: df_out
+
+- name: Explicar resultado de df -h y mostrar primeras líneas
+  debug:
+    msg: |
+      df -h output (primeras líneas):
+      {{ df_out.stdout_lines[:15] }}
+      ---
+      Explicación:
+        - Filesystem: dispositivo / partición
+        - Size: tamaño total
+        - Used: espacio usado
+        - Avail: espacio disponible
+        - Use%: porcentaje usado (si >80% conviene limpiar)
+        - Mounted on: punto de montaje (ej. '/', '/home', '/mnt/data')
+
+- name: Crear punto de almacenamiento /mnt/lab_storage
+  file:
+    path: /mnt/lab_storage
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Comprobar espacio en /mnt/lab_storage
+  command: df -h /mnt/lab_storage
+  register: storage_check
+
+- name: Mostrar info de /mnt/lab_storage
+  debug:
+    var: storage_check.stdout_lines

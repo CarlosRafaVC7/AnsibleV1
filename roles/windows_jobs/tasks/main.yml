@@ -1,0 +1,23 @@
+---
+# Rol: windows_jobs
+# Objetivo: crear tareas programadas en Windows para monitoreo.
+
+- name: Crear tarea programada 'Monitor-CPU' para registrar procesos cada 1 minuto
+  win_scheduled_task:
+    name: "Monitor-CPU"
+    description: "Registra procesos top por CPU cada 1 minuto"
+    actions:
+      - path: 'powershell.exe'
+        arguments: '-Command "Get-Process | Sort-Object CPU -Descending | Select -First 5 | Out-File -FilePath C:\\ansible_monitor\\cpu.txt -Append"'
+    triggers:
+      - type: daily
+        repetition:
+          interval: PT1M
+          duration: PT24H
+    username: 'SYSTEM'
+    state: present
+
+- name: Crear carpeta para logs C:\ansible_monitor
+  win_file:
+    path: C:\ansible_monitor
+    state: directory
