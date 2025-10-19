@@ -1,0 +1,19 @@
+---
+# Playbook principal: Administración total de laboratorios
+
+- name: Administración completa en Laboratorio Académico (Ubuntu)
+  hosts: academico
+  become: yes
+  roles:
+    - linux_users
+    - linux_services
+    - linux_jobs
+    - linux_storage
+
+- name: Administración completa en Laboratorio Gamer (Windows)
+  hosts: gamer
+  roles:
+    - windows_users
+    - windows_services
+    - windows_jobs
+    - windows_storage
