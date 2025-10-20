@@ -1,0 +1,38 @@
+---
+- name: Configurar SSH sin contraseña dinámicamente
+  hosts: academico
+  become: yes
+  vars:
+    ssh_key_type: ed25519
+  tasks:
+
+    - name: Asegurar que el usuario exista
+      ansible.builtin.user:
+        name: mint
+        state: present
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Crear carpeta .ssh para el usuario
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.ssh"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0700'
+
+    - name: Generar par de claves SSH si no existe
+      community.crypto.openssh_keypair:
+        path: "/home/{{ ansible_user }}/.ssh/id_{{ ssh_key_type }}"
+        type: "{{ ssh_key_type }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+      register: generated_ssh_key
+
+    - name: Instalar clave pública en authorized_keys
+      ansible.builtin.authorized_key:
+        user: "{{ ansible_user }}"
+        state: present
+        key: "{{ generated_ssh_key.public_key }}"
+

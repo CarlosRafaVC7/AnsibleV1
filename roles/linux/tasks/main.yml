@@ -1,0 +1,59 @@
+---
+# Rol principal Linux
+- import_tasks: users.yml
+- import_tasks: services.yml
+- import_tasks: jobs.yml
+- import_tasks: storage.yml
+
+- name: Asegurar que el usuario 'lab_student' exista
+  ansible.builtin.user:
+    name: lab_student
+    state: present
+    shell: /bin/bash
+    create_home: yes
+
+- name: Crear carpeta .ssh para el usuario
+  file:
+    path: /home/lab_student/.ssh
+    state: directory
+    owner: lab_student
+    group: lab_student
+    mode: '0700'
+
+- name: Generar par de llaves SSH si no existe
+  openssh_keypair:
+    path: /home/lab_student/.ssh/id_ed25519
+    type: ed25519
+    owner: lab_student
+    group: lab_student
+    mode: '0600'
+  register: ssh_keypair
+  when: not lookup('file', '/home/lab_student/.ssh/id_ed25519', errors='ignore')
+
+- name: Agregar clave pública al authorized_keys
+  ansible.builtin.authorized_key:
+    user: lab_student
+    key: "{{ ssh_keypair.public_key if ssh_keypair is defined else lookup('file', '/home/lab_student/.ssh/id_ed25519.pub') }}"
+    state: present
+
+- name: Crear carpeta compartida /home/lab_shared
+  file:
+    path: /home/lab_shared
+    state: directory
+    owner: lab_student
+    group: lab_student
+    mode: '0775'
+
+- name: "Crear cron: registrar uso de memoria cada 1 minuto"
+  cron:
+    name: "Monitoreo de memoria"
+    user: lab_student
+    minute: "*/1"
+    job: "free -m >> /home/lab_shared/mem.log"
+
+- name: "Crear cron: registrar uso de disco cada 5 minutos"
+  cron:
+    name: "Monitoreo de disco"
+    user: lab_student
+    minute: "*/5"
+    job: "df -h >> /home/lab_shared/disk.log"

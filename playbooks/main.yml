@@ -11,9 +11,3 @@
   hosts: gamer
   roles:
     - windows
-
-- name: Test administración local Linux
-  hosts: local
-  become: yes
-  roles:
-    - linux

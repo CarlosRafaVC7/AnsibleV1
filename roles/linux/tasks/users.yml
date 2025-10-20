@@ -1,9 +1,5 @@
----
-# Rol: linux_users
-# Objetivo: crear usuarios para el laboratorio y ajustar permisos básicos.
-
 - name: Mostrar usuarios actuales (archivo /etc/passwd)
-  command:cut -d: -f1 /etc/passwd
+  command: "cut -d: -f1 /etc/passwd"
   register: users_list
 
 - name: Mostrar usuarios (debug)

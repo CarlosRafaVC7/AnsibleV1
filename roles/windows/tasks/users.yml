@@ -2,21 +2,22 @@
 # Rol: windows_users
 # Objetivo: crear un usuario para el laboratorio gamer y aplicar permisos básicos.
 
-- name: Crear usuario 'gameruser' si no existe
+- name: "Crear usuario 'gameruser' si no existe"
   win_user:
     name: gameruser
     password: 'P@ssw0rd123!'
     state: present
-    groups: 'Users'
+    groups: 'Usuarios'
 
-- name: Crear carpeta compartida C:\lab_shared
+- name: "Crear carpeta compartida C:\\lab_shared"
   win_file:
     path: C:\lab_shared
     state: directory
 
-- name:Ajustar permisos: dar control total a Administrators sobre C:\lab_shared
+- name: "Ajustar permisos: dar control total a Administradores sobre C:\\lab_shared"
   win_acl:
     path: C:\lab_shared
-    user: 'Administrators'
+    user: 'Administradores'
     rights: FullControl
+    type: allow
     state: present

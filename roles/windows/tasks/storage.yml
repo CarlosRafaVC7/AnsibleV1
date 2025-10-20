@@ -11,8 +11,8 @@
   debug:
     var: win_drives.stdout_lines
 
-- name:Crear carpeta D:\lab_storage si existe D: (ejemplo)
+- name: "Crear carpeta D:\\lab_storage si existe D: (ejemplo)"
   win_file:
-    path: D:\lab_storage
+    path: "D:\\lab_storage"
     state: directory
   failed_when: false

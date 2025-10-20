@@ -13,7 +13,7 @@
 
 - name: Tomar snapshot con 'top' (batch 1 iteración)
   # 'top -b -n1' da lista con uso de CPU/mem por proceso en ese instante
-  command: top -b -n1 | head -n 15
+  shell: top -b -n1 | head -n 15
   register: top_out
 
 - name: Mostrar snapshot de top
