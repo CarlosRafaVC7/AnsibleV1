@@ -1,0 +1,6 @@
+---
+# Rol principal Windows
+- import_tasks: users.yml
+- import_tasks: services.yml
+- import_tasks: jobs.yml
+- import_tasks: storage.yml

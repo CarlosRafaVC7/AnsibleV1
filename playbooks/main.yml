@@ -5,15 +5,15 @@
   hosts: academico
   become: yes
   roles:
-    - linux_users
-    - linux_services
-    - linux_jobs
-    - linux_storage
+    - linux
 
 - name: Administración completa en Laboratorio Gamer (Windows)
   hosts: gamer
   roles:
-    - windows_users
-    - windows_services
-    - windows_jobs
-    - windows_storage
+    - windows
+
+- name: Test administración local Linux
+  hosts: local
+  become: yes
+  roles:
+    - linux
