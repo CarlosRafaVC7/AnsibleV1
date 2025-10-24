@@ -1,13 +1,37 @@
 ---
 # Playbook principal: Administración total de laboratorios
+# SO-Ansible (Hybrid) - Soporte para Linux, Windows y macOS
 
-- name: Administración completa en Laboratorio Académico (Ubuntu)
+- name: Administración completa en Laboratorio Académico (Linux Ubuntu/Mint)
   hosts: academico
   become: yes
   roles:
     - linux
 
-- name: Administración completa en Laboratorio Gamer (Windows)
+- name: Administración completa en Laboratorio Gamer (Windows 11 Pro)
   hosts: gamer
   roles:
     - windows
+
+- name: Administración completa en VM macOS (Testing)
+  hosts: macos_test
+  become: yes
+  roles:
+    - macos
+  when: inventory_hostname in groups['macos_test']
+
+- name: Resumen de administración
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg:
+          - "=== ADMINISTRACIÓN COMPLETADA ==="
+          - ""
+          - "Hosts configurados:"
+          - "  Académico (Linux): {{ groups['academico'] | length }} host(s)"
+          - "  Gamer (Windows): {{ groups['gamer'] | length }} host(s)"
+          - "  macOS Test: {{ groups['macos_test'] | default([]) | length }} host(s)"
+          - ""
+          - "Siguiente paso: ansible-playbook tests/validate_configuration.yml"

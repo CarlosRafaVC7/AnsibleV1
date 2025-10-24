@@ -1,0 +1,70 @@
+---
+# Playbook para crear VMs en VMware ESXi
+# Usar para levantar infraestructura en servidor ESXi remoto
+
+- name: Crear VMs en infraestructura ESXi
+  hosts: localhost
+  gather_facts: no
+  collections: 
+    - community.vmware
+  vars:
+    # Variables ESXi - ACTUALIZAR CON VALORES REALES
+    esxi_host: "168.121.48.254:10113"
+    esxi_user: "root"
+    esxi_pass: "PASSWORD_AQUI"  # TODO: Mover a ansible-vault
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    
+    # Configuración del datastore
+    datastore_name: "datastore1"
+    vm_network: "VM Network"
+    
+    # Rutas de ISOs en el datastore
+    ubuntu_iso_path: "[datastore1] ubuntu-24.04.3-live-server-amd64.iso"
+    windows_iso_path: "[datastore1] windows-11-pro.iso"
+    
+    # Configuración de VMs
+    vm_academico_name: "ubuntu-academico"
+    vm_academico_memory: 4096
+    vm_academico_cpus: 2
+    vm_academico_disk: 40
+    
+    vm_gamer_name: "windows-gamer"
+    vm_gamer_memory: 8192
+    vm_gamer_cpus: 4
+    vm_gamer_disk: 80
+    
+    # Opciones de creación
+    create_vm_academico: true
+    create_vm_gamer: true
+    create_vm_macos: false
+    power_on_vms: true
+    
+  pre_tasks:
+    - name: Verificar que las variables ESXi estén definidas
+      ansible.builtin.assert:
+        that:
+          - esxi_host is defined
+          - esxi_user is defined
+          - esxi_pass is defined
+          - esxi_pass != "PASSWORD_AQUI"
+        fail_msg: "Configure las variables ESXi antes de ejecutar"
+        
+    - name: Instalar collection community.vmware si no está presente
+      ansible.builtin.command: ansible-galaxy collection install community.vmware
+      failed_when: false
+      changed_when: false
+      
+  roles:
+    - infrastructure
+    
+  post_tasks:
+    - name: Instrucciones finales ESXi
+      ansible.builtin.debug:
+        msg:
+          - "=== VMs creadas en ESXi {{ esxi_host }} ==="
+          - ""
+          - "Siguiente paso:"
+          - "1. Complete la instalación de OS en las VMs desde vSphere Client"
+          - "2. Configure red IPv6 en cada VM"
+          - "3. Actualice inventory/hosts.ini con las IPs reales"
+          - "4. Ejecute: ansible-playbook playbooks/main.yml"

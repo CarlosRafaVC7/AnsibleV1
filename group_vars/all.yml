@@ -1,0 +1,44 @@
+---
+# Variables globales para todos los hosts
+
+# Configuración general del proyecto
+project_name: "SO-Ansible-Hybrid"
+project_version: "1.0"
+ansible_managed_banner: "*** Archivo gestionado por Ansible - No editar manualmente ***"
+
+# Configuración IPv6 global
+ipv6_prefix: "2001:db8:1"
+ipv6_preferred: true
+
+# DNS servers (IPv6 + IPv4 fallback)
+dns_servers:
+  - "2001:4860:4860::8888"  # Google DNS IPv6
+  - "2001:4860:4860::8844"  # Google DNS IPv6
+  - "8.8.8.8"               # Google DNS IPv4
+  - "8.8.4.4"               # Google DNS IPv4
+
+# NTP servers
+ntp_servers:
+  - "pool.ntp.org"
+  - "time.cloudflare.com"
+
+# Timezone
+timezone: "America/Lima"
+
+# Configuración de logs
+log_rotation: true
+log_max_size: "100M"
+log_retention_days: 30
+
+# Configuración de seguridad
+disable_root_ssh: true
+ssh_port: 22
+ssh_protocol: 2
+
+# Configuración de backup (futuro)
+backup_enabled: false
+backup_directory: "/backup/ansible"
+
+# Configuración de actualizaciones automáticas
+auto_updates: false
+reboot_after_updates: false

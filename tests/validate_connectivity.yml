@@ -1,0 +1,115 @@
+---
+# Playbook de validación de conectividad
+# Verifica que todos los hosts estén accesibles y respondan correctamente
+
+- name: Test de conectividad - Hosts Linux
+  hosts: linux
+  gather_facts: yes
+  tasks:
+    - name: Ping básico Linux
+      ansible.builtin.ping:
+      register: ping_result
+
+    - name: Verificar usuario actual
+      ansible.builtin.command: whoami
+      register: current_user
+      changed_when: false
+
+    - name: Verificar conectividad SSH
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        timeout: 10
+      delegate_to: localhost
+      when: inventory_hostname != '127.0.0.1'
+
+    - name: Mostrar resultado conectividad Linux
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Ping: {{ 'OK' if ping_result is succeeded else 'FAILED' }}"
+          - "Usuario: {{ current_user.stdout }}"
+          - "Sistema: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "IPv6: {{ ansible_facts['default_ipv6']['address'] | default('No configurado') }}"
+          - "IPv4: {{ ansible_facts['default_ipv4']['address'] | default('No configurado') }}"
+
+- name: Test de conectividad - Hosts Windows
+  hosts: windows
+  gather_facts: yes
+  tasks:
+    - name: Ping básico Windows
+      ansible.windows.win_ping:
+      register: win_ping_result
+
+    - name: Verificar usuario actual Windows
+      ansible.windows.win_shell: $env:USERNAME
+      register: win_current_user
+      changed_when: false
+
+    - name: Verificar conectividad WinRM
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: "{{ ansible_port | default(5985) }}"
+        timeout: 10
+      delegate_to: localhost
+
+    - name: Verificar PowerShell
+      ansible.windows.win_shell: $PSVersionTable.PSVersion
+      register: ps_version
+      changed_when: false
+
+    - name: Mostrar resultado conectividad Windows
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Win Ping: {{ 'OK' if win_ping_result is succeeded else 'FAILED' }}"
+          - "Usuario: {{ win_current_user.stdout | trim }}"
+          - "Sistema: {{ ansible_facts['distribution'] | default('Windows') }} {{ ansible_facts['distribution_version'] | default('Unknown') }}"
+          - "PowerShell: {{ ps_version.stdout | trim if ps_version is succeeded else 'No disponible' }}"
+          - "Puerto WinRM: {{ ansible_port | default(5985) }}"
+
+- name: Test de conectividad - macOS
+  hosts: macos_test
+  gather_facts: yes
+  tasks:
+    - name: Ping básico macOS
+      ansible.builtin.ping:
+      register: macos_ping_result
+
+    - name: Verificar usuario actual macOS
+      ansible.builtin.command: whoami
+      register: macos_current_user
+      changed_when: false
+
+    - name: Verificar versión de macOS
+      ansible.builtin.command: sw_vers
+      register: macos_version
+      changed_when: false
+
+    - name: Mostrar resultado conectividad macOS
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Ping: {{ 'OK' if macos_ping_result is succeeded else 'FAILED' }}"
+          - "Usuario: {{ macos_current_user.stdout }}"
+          - "Sistema: {{ macos_version.stdout_lines[0:2] }}"
+          - "SSH: Funcionando"
+
+- name: Resumen de conectividad
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg:
+          - "=== RESUMEN DE CONECTIVIDAD ==="
+          - ""
+          - "✅ Ejecute este playbook para validar que todos los hosts respondan"
+          - "✅ Verifique que no haya errores en las conexiones"
+          - "✅ Si algún host falla, revise:"
+          - "   - Configuración de red (IPv4/IPv6)"
+          - "   - Servicios SSH/WinRM activos"
+          - "   - Credenciales en inventory/hosts.ini"
+          - "   - Reglas de firewall"
+          - ""
+          - "Siguiente paso: ansible-playbook playbooks/main.yml"

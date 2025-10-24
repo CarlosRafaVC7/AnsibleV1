@@ -3,14 +3,14 @@
 # Objetivo: crear tareas programadas en Windows para monitoreo.
 
 - name: Crear carpeta para logs C:\ansible_monitor
-  win_file:
+  ansible.windows.win_file:
     path: C:\ansible_monitor
     state: directory
 
 - name: Crear tarea programada 'Monitor-CPU' para registrar procesos cada 1 minuto
   vars:
     ahora: "{{ '%Y-%m-%dT%H:%M:%S' | strftime }}"
-  win_scheduled_task:
+  community.windows.win_scheduled_task:
     name: "Monitor-CPU"
     description: "Registra procesos top por CPU cada 1 minuto"
     actions:

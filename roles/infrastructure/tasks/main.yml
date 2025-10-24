@@ -1,0 +1,30 @@
+---
+# Rol principal de Infraestructura: gestiona creación/configuración de VMs
+# Soporta tanto VMware ESXi como VirtualBox local
+
+- name: Verificar que las collections requeridas estén instaladas
+  ansible.builtin.assert:
+    that:
+      - ansible_version.full is version('2.12', '>=')
+    fail_msg: "Se requiere Ansible 2.12 o superior"
+    quiet: true
+
+- name: Detectar entorno de infraestructura
+  ansible.builtin.set_fact:
+    infra_type: "{{ 'esxi' if esxi_host is defined else 'virtualbox' }}"
+
+- name: Mostrar tipo de infraestructura detectado
+  ansible.builtin.debug:
+    msg: "Usando infraestructura: {{ infra_type }}"
+
+# Ejecutar tareas específicas según el tipo de infraestructura
+- name: Incluir tareas ESXi/VMware
+  ansible.builtin.include_tasks: esxi.yml
+  when: infra_type == 'esxi'
+
+- name: Incluir tareas VirtualBox
+  ansible.builtin.include_tasks: virtualbox.yml
+  when: infra_type == 'virtualbox'
+
+- name: Configuración común post-creación
+  ansible.builtin.include_tasks: common.yml

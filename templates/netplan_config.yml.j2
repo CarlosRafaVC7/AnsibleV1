@@ -1,0 +1,57 @@
+# {{ ansible_managed_banner }}
+# Netplan configuration for {{ inventory_hostname }}
+# Generated: {{ ansible_date_time.iso8601 }}
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    # Interface principal (actualizar según el sistema)
+    {{ ansible_default_ipv4.interface | default('ens33') }}:
+{% if ipv6_enabled %}
+      # Configuración IPv6 primaria
+      addresses:
+        - {{ ipv6_address }}
+{% if ipv4_enabled %}
+        - {{ ipv4_address }}
+{% endif %}
+      
+      # Gateway IPv6
+      gateway6: {{ ipv6_gateway }}
+      
+{% if ipv4_enabled %}
+      # Gateway IPv4 (fallback)
+      gateway4: {{ ipv4_gateway }}
+{% endif %}
+
+      # DNS servers (IPv6 preferido)
+      nameservers:
+        addresses:
+{% for dns in dns_servers %}
+          - {{ dns }}
+{% endfor %}
+        search:
+          - localdomain
+          - local
+
+{% else %}
+      # Solo IPv4 (IPv6 deshabilitado)
+      addresses:
+        - {{ ipv4_address }}
+      
+      gateway4: {{ ipv4_gateway }}
+      
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
+{% endif %}
+
+      # Configuraciones adicionales
+      dhcp4: false
+      dhcp6: false
+      accept-ra: true
+      
+      # Optimizaciones de red
+      optional: true
+      activation-mode: manual

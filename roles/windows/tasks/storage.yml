@@ -3,16 +3,16 @@
 # Objetivo: comprobar discos y espacio en Windows.
 
 - name: Listar discos y uso (Get-PSDrive)
-  win_shell: |
+  ansible.windows.win_shell: |
     Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize
   register: win_drives
 
 - name: Mostrar salida de Get-PSDrive
-  debug:
+  ansible.builtin.debug:
     var: win_drives.stdout_lines
 
 - name: "Crear carpeta D:\\lab_storage si existe D: (ejemplo)"
-  win_file:
+  ansible.windows.win_file:
     path: "D:\\lab_storage"
     state: directory
   failed_when: false

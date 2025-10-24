@@ -1,0 +1,46 @@
+---
+# Variables para grupo academico (Linux Ubuntu/Mint)
+
+# Configuración de usuario
+default_user: "mint"
+lab_user: "lab_student"
+shared_folder: "/home/lab_shared"
+
+# Configuración IPv6
+ipv6_enabled: true
+ipv6_config_method: "static"  # static, dhcp, auto
+ipv6_address: "{{ ipv6_prefix }}::100/64"  # Actualizar con IP real
+ipv6_gateway: "{{ ipv6_prefix }}::1"
+
+# Fallback IPv4
+ipv4_enabled: true
+ipv4_address: "192.168.18.28/24"
+ipv4_gateway: "192.168.18.1"
+
+# Servicios requeridos
+required_services:
+  - ssh
+  - cron
+  - systemd-resolved
+
+# Paquetes a instalar
+required_packages:
+  - openssh-server
+  - python3
+  - python3-pip
+  - htop
+  - vim
+  - curl
+  - wget
+  - net-tools
+  - netplan.io
+
+# Configuración de monitoreo
+monitoring_enabled: true
+log_directory: "/var/log/ansible_monitor"
+memory_check_interval: "*/1"  # cada minuto
+disk_check_interval: "*/5"   # cada 5 minutos
+
+# Configuración SSH
+ssh_key_type: "ed25519"
+ssh_key_path: "/home/{{ default_user }}/.ssh/id_{{ ssh_key_type }}_ansible"

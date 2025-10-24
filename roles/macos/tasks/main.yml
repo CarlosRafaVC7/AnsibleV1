@@ -1,0 +1,43 @@
+---
+# Rol principal macOS
+# Administración de VM macOS Mojave para testing
+
+- name: Verificar que estamos en macOS
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'Darwin'
+    fail_msg: "Este rol solo funciona en sistemas macOS"
+
+- name: Mostrar información del sistema macOS
+  ansible.builtin.debug:
+    msg:
+      - "Sistema: {{ ansible_facts['system'] }} {{ ansible_facts['distribution_version'] }}"
+      - "Arquitectura: {{ ansible_facts['architecture'] }}"
+      - "Hostname: {{ ansible_facts['hostname'] }}"
+
+- name: Incluir tareas de usuarios
+  ansible.builtin.include_tasks: users.yml
+
+- name: Incluir tareas de servicios
+  ansible.builtin.include_tasks: services.yml
+
+- name: Incluir tareas de configuración de red
+  ansible.builtin.include_tasks: network.yml
+
+- name: Incluir tareas de monitoreo
+  ansible.builtin.include_tasks: monitoring.yml
+
+- name: Configurar SSH si está habilitado
+  ansible.builtin.include_tasks: ssh.yml
+  when: ssh_enabled | default(true)
+
+- name: Mostrar resumen de configuración
+  ansible.builtin.debug:
+    msg:
+      - "=== Configuración macOS completada ==="
+      - "Usuario principal: {{ default_user }}"
+      - "Usuario de laboratorio: {{ lab_user }}"
+      - "Carpeta compartida: {{ shared_folder }}"
+      - "IPv6 habilitado: {{ ipv6_enabled }}"
+      - "SSH habilitado: {{ ssh_enabled | default(true) }}"
+      - "Monitoreo habilitado: {{ monitoring_enabled }}"

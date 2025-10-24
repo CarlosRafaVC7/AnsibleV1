@@ -21,7 +21,7 @@
     mode: '0700'
 
 - name: Generar par de llaves SSH si no existe
-  openssh_keypair:
+  community.crypto.openssh_keypair:
     path: /home/lab_student/.ssh/id_ed25519
     type: ed25519
     owner: lab_student

@@ -1,0 +1,37 @@
+---
+# Gestión de servicios en macOS
+
+- name: Habilitar SSH (Remote Login)
+  ansible.builtin.command: systemsetup -setremotelogin on
+  become: yes
+  register: ssh_enable_result
+  changed_when: "'Remote Login' in ssh_enable_result.stdout"
+
+- name: Verificar estado del servicio SSH
+  ansible.builtin.command: systemsetup -getremotelogin
+  register: ssh_status
+  changed_when: false
+
+- name: Mostrar estado SSH
+  ansible.builtin.debug:
+    msg: "Estado SSH: {{ ssh_status.stdout }}"
+
+- name: Listar servicios activos (launchctl)
+  ansible.builtin.shell: launchctl list | grep -E '(ssh|system)' | head -10
+  register: active_services
+  changed_when: false
+  failed_when: false
+
+- name: Mostrar servicios activos
+  ansible.builtin.debug:
+    msg: "Servicios activos: {{ active_services.stdout_lines }}"
+
+- name: Verificar servicio de tiempo (chronosyncd)
+  ansible.builtin.command: systemsetup -getusingnetworktime
+  register: ntp_status
+  changed_when: false
+
+- name: Habilitar sincronización automática de tiempo
+  ansible.builtin.command: systemsetup -setusingnetworktime on
+  become: yes
+  when: "'Network Time' not in ntp_status.stdout or 'On' not in ntp_status.stdout"

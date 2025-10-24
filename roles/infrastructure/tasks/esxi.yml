@@ -1,0 +1,154 @@
+---
+# Tareas específicas para VMware ESXi
+# Crear y configurar VMs en infraestructura ESXi/vSphere
+
+- name: Verificar credenciales ESXi
+  ansible.builtin.assert:
+    that:
+      - esxi_host is defined
+      - esxi_user is defined
+      - esxi_pass is defined
+    fail_msg: "Se requieren variables: esxi_host, esxi_user, esxi_pass"
+
+- name: Crear VM Ubuntu (Laboratorio Académico) en ESXi
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    esxi_hostname: "{{ esxi_hostname_fqdn | default('localhost.localdomain') }}"
+    folder: "/"
+    name: "{{ vm_academico_name | default('ubuntu-academico') }}"
+    state: present
+    guest_id: "ubuntu64Guest"
+    datastore: "{{ datastore_name | default('datastore1') }}"
+    hardware:
+      memory_mb: "{{ vm_academico_memory | default(4096) }}"
+      num_cpus: "{{ vm_academico_cpus | default(2) }}"
+      scsi: paravirtual
+    disk:
+      - size_gb: "{{ vm_academico_disk | default(40) }}"
+        type: thin
+        datastore: "{{ datastore_name | default('datastore1') }}"
+    networks:
+      - name: "{{ vm_network | default('VM Network') }}"
+        start_connected: true
+        device_type: vmxnet3
+    cdrom:
+      - type: iso
+        iso_path: "{{ ubuntu_iso_path | default('[datastore1] ubuntu-24.04.3-live-server-amd64.iso') }}"
+        controller_type: ide
+        controller_number: 0
+        unit_number: 0
+    wait_for_ip_address: false
+    state_change_timeout: 300
+  register: vm_academico_result
+  when: create_vm_academico | default(true)
+
+- name: Crear VM Windows (Laboratorio Gamer) en ESXi
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    esxi_hostname: "{{ esxi_hostname_fqdn | default('localhost.localdomain') }}"
+    folder: "/"
+    name: "{{ vm_gamer_name | default('windows-gamer') }}"
+    state: present
+    guest_id: "windows2019srvNext_64Guest"
+    datastore: "{{ datastore_name | default('datastore1') }}"
+    hardware:
+      memory_mb: "{{ vm_gamer_memory | default(8192) }}"
+      num_cpus: "{{ vm_gamer_cpus | default(4) }}"
+      scsi: paravirtual
+    disk:
+      - size_gb: "{{ vm_gamer_disk | default(80) }}"
+        type: thin
+        datastore: "{{ datastore_name | default('datastore1') }}"
+    networks:
+      - name: "{{ vm_network | default('VM Network') }}"
+        start_connected: true
+        device_type: vmxnet3
+    cdrom:
+      - type: iso
+        iso_path: "{{ windows_iso_path | default('[datastore1] windows-11-pro.iso') }}"
+        controller_type: ide
+        controller_number: 0
+        unit_number: 0
+    wait_for_ip_address: false
+    state_change_timeout: 300
+  register: vm_gamer_result
+  when: create_vm_gamer | default(true)
+
+- name: Crear VM macOS (Testing) en ESXi
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    esxi_hostname: "{{ esxi_hostname_fqdn | default('localhost.localdomain') }}"
+    folder: "/"
+    name: "{{ vm_macos_name | default('macos-mojave-test') }}"
+    state: present
+    guest_id: "darwin18_64Guest"
+    datastore: "{{ datastore_name | default('datastore1') }}"
+    hardware:
+      memory_mb: "{{ vm_macos_memory | default(6144) }}"
+      num_cpus: "{{ vm_macos_cpus | default(2) }}"
+      scsi: paravirtual
+    disk:
+      - size_gb: "{{ vm_macos_disk | default(60) }}"
+        type: thin
+        datastore: "{{ datastore_name | default('datastore1') }}"
+    networks:
+      - name: "{{ vm_network | default('VM Network') }}"
+        start_connected: true
+        device_type: vmxnet3
+    wait_for_ip_address: false
+    state_change_timeout: 300
+  register: vm_macos_result
+  when: create_vm_macos | default(false)
+
+- name: Encender VMs creadas
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    name: "{{ item }}"
+    state: poweredon
+  loop:
+    - "{{ vm_academico_name | default('ubuntu-academico') }}"
+    - "{{ vm_gamer_name | default('windows-gamer') }}"
+    - "{{ vm_macos_name | default('macos-mojave-test') }}"
+  when: 
+    - power_on_vms | default(true)
+    - (item == vm_academico_name and create_vm_academico | default(true)) or
+      (item == vm_gamer_name and create_vm_gamer | default(true)) or
+      (item == vm_macos_name and create_vm_macos | default(false))
+
+- name: Obtener información de las VMs creadas
+  community.vmware.vmware_guest_info:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    name: "{{ item }}"
+  register: vms_info
+  loop:
+    - "{{ vm_academico_name | default('ubuntu-academico') }}"
+    - "{{ vm_gamer_name | default('windows-gamer') }}"
+    - "{{ vm_macos_name | default('macos-mojave-test') }}"
+  when: 
+    - (item == vm_academico_name and create_vm_academico | default(true)) or
+      (item == vm_gamer_name and create_vm_gamer | default(true)) or
+      (item == vm_macos_name and create_vm_macos | default(false))
+
+- name: Mostrar resumen de VMs en ESXi
+  ansible.builtin.debug:
+    msg:
+      - "=== VMs creadas en ESXi ==="
+      - "Host ESXi: {{ esxi_host }}"
+      - "Datastore: {{ datastore_name | default('datastore1') }}"
+      - "Red: {{ vm_network | default('VM Network') }}"
+      - "VMs: {{ vms_info.results | map(attribute='instance.hw_name') | list if vms_info is defined }}"

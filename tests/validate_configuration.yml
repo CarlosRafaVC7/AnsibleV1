@@ -1,0 +1,145 @@
+---
+# Test de configuración post-despliegue
+# Verifica que las configuraciones aplicadas estén funcionando correctamente
+
+- name: Validar configuración Linux
+  hosts: linux
+  gather_facts: yes
+  tasks:
+    - name: Verificar que el usuario lab_student existe
+      ansible.builtin.getent:
+        database: passwd
+        key: lab_student
+      register: lab_user_check
+      failed_when: false
+
+    - name: Verificar carpeta compartida
+      ansible.builtin.stat:
+        path: "{{ shared_folder | default('/home/lab_shared') }}"
+      register: shared_folder_check
+
+    - name: Verificar directorio de logs
+      ansible.builtin.stat:
+        path: "{{ log_directory | default('/var/log/ansible_monitor') }}"
+      register: log_dir_check
+
+    - name: Verificar jobs de cron
+      ansible.builtin.shell: crontab -l | grep -E "(memoria|disk)" | wc -l
+      register: cron_jobs_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verificar servicio SSH
+      ansible.builtin.service_facts:
+      register: services
+
+    - name: Mostrar resultado validación Linux
+      ansible.builtin.debug:
+        msg:
+          - "=== Validación {{ inventory_hostname }} (Linux) ==="
+          - "Usuario lab_student: {{ 'OK' if lab_user_check.failed == false else 'MISSING' }}"
+          - "Carpeta compartida: {{ 'OK' if shared_folder_check.stat.exists else 'MISSING' }}"
+          - "Directorio logs: {{ 'OK' if log_dir_check.stat.exists else 'MISSING' }}"
+          - "Jobs de cron: {{ cron_jobs_check.stdout | default('0') }} configurados"
+          - "SSH activo: {{ 'OK' if services.ansible_facts.services['ssh.service'].state == 'running' else 'INACTIVE' }}"
+          - "IPv6: {{ ansible_facts['default_ipv6']['address'] | default('No configurado') }}"
+
+- name: Validar configuración Windows
+  hosts: windows
+  gather_facts: yes
+  tasks:
+    - name: Verificar usuario gameruser
+      ansible.windows.win_user:
+        name: gameruser
+        state: present
+      register: gamer_user_check
+      failed_when: false
+      changed_when: false
+
+    - name: Verificar carpeta compartida Windows
+      ansible.windows.win_stat:
+        path: "{{ shared_folder | default('C:\\lab_shared') }}"
+      register: win_shared_folder_check
+
+    - name: Verificar directorio de logs Windows
+      ansible.windows.win_stat:
+        path: "{{ log_directory | default('C:\\ansible_monitor') }}"
+      register: win_log_dir_check
+
+    - name: Verificar tareas programadas
+      ansible.windows.win_shell: |
+        Get-ScheduledTask | Where-Object {$_.TaskName -like "*Monitor*"} | Measure-Object | Select-Object -ExpandProperty Count
+      register: scheduled_tasks_check
+      changed_when: false
+
+    - name: Verificar WinRM
+      ansible.windows.win_shell: |
+        Get-Service WinRM | Select-Object -ExpandProperty Status
+      register: winrm_status
+      changed_when: false
+
+    - name: Mostrar resultado validación Windows
+      ansible.builtin.debug:
+        msg:
+          - "=== Validación {{ inventory_hostname }} (Windows) ==="
+          - "Usuario gameruser: {{ 'OK' if gamer_user_check.failed == false else 'MISSING' }}"
+          - "Carpeta compartida: {{ 'OK' if win_shared_folder_check.stat.exists else 'MISSING' }}"
+          - "Directorio logs: {{ 'OK' if win_log_dir_check.stat.exists else 'MISSING' }}"
+          - "Tareas programadas: {{ scheduled_tasks_check.stdout | trim }} configuradas"
+          - "WinRM activo: {{ 'OK' if winrm_status.stdout | trim == 'Running' else 'INACTIVE' }}"
+
+- name: Validar configuración macOS
+  hosts: macos_test
+  gather_facts: yes
+  tasks:
+    - name: Verificar usuario testuser
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ lab_user | default('testuser') }}"
+      register: macos_user_check
+      failed_when: false
+
+    - name: Verificar carpeta compartida macOS
+      ansible.builtin.stat:
+        path: "{{ shared_folder | default('/Users/Shared/lab_shared') }}"
+      register: macos_shared_folder_check
+
+    - name: Verificar LaunchAgent de monitoreo
+      ansible.builtin.stat:
+        path: "/Users/{{ lab_user | default('testuser') }}/Library/LaunchAgents/com.ansible.system.monitor.plist"
+      register: launchagent_check
+
+    - name: Verificar SSH en macOS
+      ansible.builtin.command: systemsetup -getremotelogin
+      register: macos_ssh_status
+      changed_when: false
+
+    - name: Mostrar resultado validación macOS
+      ansible.builtin.debug:
+        msg:
+          - "=== Validación {{ inventory_hostname }} (macOS) ==="
+          - "Usuario {{ lab_user | default('testuser') }}: {{ 'OK' if macos_user_check.failed == false else 'MISSING' }}"
+          - "Carpeta compartida: {{ 'OK' if macos_shared_folder_check.stat.exists else 'MISSING' }}"
+          - "LaunchAgent monitoreo: {{ 'OK' if launchagent_check.stat.exists else 'MISSING' }}"
+          - "SSH remoto: {{ 'OK' if 'On' in macos_ssh_status.stdout else 'INACTIVE' }}"
+
+- name: Resumen de validación
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Mostrar instrucciones finales
+      ansible.builtin.debug:
+        msg:
+          - "=== VALIDACIÓN COMPLETADA ==="
+          - ""
+          - "Revise los resultados anteriores para identificar problemas"
+          - ""
+          - "Archivos de logs a monitorear:"
+          - "  Linux: /var/log/ansible_monitor/"
+          - "  Windows: C:\\ansible_monitor\\"
+          - "  macOS: /var/log/ansible_monitor/"
+          - ""
+          - "Para troubleshooting:"
+          - "  - ansible -m ping all"
+          - "  - ansible -m win_ping windows"
+          - "  - ansible -m setup all --limit=HOSTNAME"
