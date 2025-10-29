@@ -1,0 +1,12 @@
+---
+# Handlers para el rol macOS
+
+- name: restart_ssh
+  ansible.builtin.command: sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist && sudo launchctl load /System/Library/LaunchDaemons/ssh.plist
+  become: yes
+  failed_when: false
+
+- name: reload_ssh_config
+  ansible.builtin.command: sudo pkill -HUP sshd
+  become: yes
+  failed_when: false

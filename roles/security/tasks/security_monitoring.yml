@@ -1,0 +1,118 @@
+---
+# Monitoreo y alertas de seguridad
+# Configuración de logging, alertas y reportes
+
+- name: Instalar herramientas de monitoreo (Linux)
+  ansible.builtin.apt:
+    name:
+      - logwatch
+      - psad
+      - tripwire
+      - ossec-hids
+      - nmap
+      - tcpdump
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+
+- name: Configurar logwatch para reportes diarios
+  ansible.builtin.template:
+    src: logwatch.conf.j2
+    dest: /etc/logwatch/conf/logwatch.conf
+    backup: yes
+  when: ansible_os_family == "Debian"
+
+- name: Crear script de monitoreo de conexiones activas
+  ansible.builtin.template:
+    src: monitor_connections.sh.j2
+    dest: /usr/local/bin/monitor_connections.sh
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Crear script de monitoreo para Windows
+  ansible.windows.win_template:
+    src: monitor_security_windows.ps1.j2
+    dest: C:\ansible_monitor\monitor_security.ps1
+  when: ansible_os_family == "Windows"
+
+- name: Programar monitoreo cada 5 minutos (Linux)
+  ansible.builtin.cron:
+    name: "Security connection monitoring"
+    minute: "*/5"
+    job: "/usr/local/bin/monitor_connections.sh"
+    user: root
+  when: ansible_os_family == "Debian"
+
+- name: Programar monitoreo cada 5 minutos (Windows)
+  community.windows.win_scheduled_task:
+    name: "Security-Connection-Monitor"
+    description: "Monitorea conexiones de red cada 5 minutos"
+    actions:
+      - path: 'powershell.exe'
+        arguments: '-ExecutionPolicy Bypass -File C:\ansible_monitor\monitor_security.ps1'
+    triggers:
+      - type: daily
+        start_boundary: "2025-01-01T00:00:00"
+        repetition:
+          interval: PT5M
+          duration: PT24H
+    username: 'SYSTEM'
+    state: present
+  when: ansible_os_family == "Windows"
+
+- name: Configurar alertas de intrusión (Linux)
+  ansible.builtin.template:
+    src: intrusion_alerts.sh.j2
+    dest: /usr/local/bin/intrusion_alerts.sh
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Configurar detección de cambios en archivos críticos
+  ansible.builtin.template:
+    src: file_integrity.sh.j2
+    dest: /usr/local/bin/file_integrity.sh
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Programar verificación de integridad diaria
+  ansible.builtin.cron:
+    name: "File integrity check"
+    minute: "0"
+    hour: "4"
+    job: "/usr/local/bin/file_integrity.sh"
+    user: root
+  when: ansible_os_family == "Debian"
+
+- name: Crear dashboard de seguridad
+  ansible.builtin.template:
+    src: security_dashboard.html.j2
+    dest: "{{ '/var/www/html/security_dashboard.html' if ansible_os_family == 'Debian' else 'C:\\inetpub\\wwwroot\\security_dashboard.html' }}"
+    mode: '0644'
+
+- name: Configurar reporte semanal de seguridad
+  ansible.builtin.template:
+    src: weekly_security_report.sh.j2
+    dest: /usr/local/bin/weekly_security_report.sh
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Programar reporte semanal
+  ansible.builtin.cron:
+    name: "Weekly security report"
+    minute: "0"
+    hour: "6"
+    weekday: "1"
+    job: "/usr/local/bin/weekly_security_report.sh"
+    user: root
+  when: ansible_os_family == "Debian"
+
+- name: Configurar alertas por email para eventos críticos
+  ansible.builtin.lineinfile:
+    path: /etc/aliases
+    line: "security-alerts: {{ admin_email | default('root') }}"
+    create: yes
+  when: 
+    - ansible_os_family == "Debian"
+    - admin_email is defined
+  notify: newaliases

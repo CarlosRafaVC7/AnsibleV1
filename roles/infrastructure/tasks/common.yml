@@ -1,0 +1,64 @@
+---
+# Configuración común después de crear las VMs
+# Validaciones y preparativos para configuración posterior
+
+- name: Esperar tiempo para que las VMs se inicialicen
+  ansible.builtin.pause:
+    seconds: "{{ vm_boot_wait | default(30) }}"
+    prompt: "Esperando {{ vm_boot_wait | default(30) }} segundos para que las VMs se inicialicen..."
+  when: wait_for_boot | default(true)
+
+- name: Mostrar instrucciones post-instalación
+  ansible.builtin.debug:
+    msg:
+      - "=== INSTRUCCIONES POST-CREACIÓN ==="
+      - ""
+      - "1. Las VMs han sido creadas. Complete la instalación del OS manualmente si es necesario."
+      - ""
+      - "2. Para Ubuntu (Académico):"
+      - "   - Configure red estática o DHCP con IPv6"
+      - "   - Instale openssh-server: sudo apt install openssh-server"
+      - "   - Configure usuario 'mint' con sudo"
+      - ""
+      - "3. Para Windows (Gamer):"
+      - "   - Configure WinRM: Enable-PSRemoting -Force"
+      - "   - Configure firewall para WinRM puerto 5985"
+      - "   - Configure usuario 'Administrador' con contraseña"
+      - ""
+      - "4. Para macOS (Test):"
+      - "   - Habilite 'Remote Login' en System Preferences > Sharing"
+      - "   - Configure usuario con privilegios de administrador"
+      - ""
+      - "5. Actualice inventory/hosts.ini con las IPs asignadas a las VMs"
+      - ""
+      - "6. Ejecute playbooks/main.yml para configurar las VMs automáticamente"
+
+- name: Crear archivo de configuración temporal con IPs sugeridas
+  ansible.builtin.copy:
+    content: |
+      # Archivo temporal - Actualizar inventory/hosts.ini con estas IPs
+      # Generado: {{ ansible_date_time.iso8601 | default('manual') }}
+      
+      [academico]
+      # Ubuntu VM - Actualizar con IP real
+      192.168.56.10 ansible_user=mint ansible_ssh_private_key_file=~/.ssh/id_ed25519_ansible
+      
+      [gamer]  
+      # Windows VM - Actualizar con IP real
+      192.168.56.11 ansible_user=Administrador ansible_password='Upeu2025#' ansible_connection=winrm ansible_winrm_transport=ntlm ansible_port=5985 ansible_winrm_server_cert_validation=ignore
+      
+      [macos_test]
+      # macOS VM - Actualizar con IP real (opcional)
+      192.168.56.12 ansible_user=admin ansible_ssh_private_key_file=~/.ssh/id_ed25519_ansible
+      
+      [local]
+      127.0.0.1 ansible_connection=local ansible_user={{ ansible_user | default('mint') }} ansible_python_interpreter=/usr/bin/python3
+      
+      [all:vars]
+      ansible_python_interpreter=/usr/bin/python3
+    dest: "{{ playbook_dir }}/inventory_template.ini"
+    mode: '0644'
+
+- name: Mostrar ubicación del template de inventory
+  ansible.builtin.debug:
+    msg: "Template de inventory creado en: {{ playbook_dir }}/inventory_template.ini"

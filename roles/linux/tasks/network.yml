@@ -1,0 +1,80 @@
+---
+# Configuración de red para Linux (Ubuntu/Mint)
+
+- name: Verificar si netplan está disponible
+  ansible.builtin.command: which netplan
+  register: netplan_available
+  changed_when: false
+  failed_when: false
+
+- name: Instalar netplan si no está presente
+  ansible.builtin.package:
+    name: netplan.io
+    state: present
+  when: netplan_available.rc != 0
+
+- name: Obtener información de interfaces de red
+  ansible.builtin.setup:
+    gather_subset: network
+  
+- name: Mostrar interfaces de red disponibles
+  ansible.builtin.debug:
+    msg: 
+      - "Interface principal: {{ ansible_default_ipv4.interface | default('No detectada') }}"
+      - "IP actual IPv4: {{ ansible_default_ipv4.address | default('No configurada') }}"
+      - "IP actual IPv6: {{ ansible_default_ipv6.address | default('No configurada') }}"
+
+- name: Crear directorio netplan si no existe
+  ansible.builtin.file:
+    path: /etc/netplan
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Generar configuración netplan IPv6
+  ansible.builtin.template:
+    src: netplan_config.yml.j2
+    dest: /etc/netplan/01-ansible-config.yaml
+    backup: yes
+    mode: '0644'
+  become: yes
+  notify: apply_netplan
+  when: 
+    - ipv6_enabled | default(false)
+    - netplan_available.rc == 0
+
+- name: Configurar DNS IPv6 en systemd-resolved
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNS='
+    line: "DNS={{ dns_servers | join(' ') }}"
+    backup: yes
+  become: yes
+  notify: restart_networking
+  when: ipv6_enabled | default(false)
+
+- name: Verificar configuración de red actual
+  ansible.builtin.command: ip addr show {{ ansible_default_ipv4.interface | default('ens33') }}
+  register: current_network_config
+  changed_when: false
+
+- name: Mostrar configuración de red actual
+  ansible.builtin.debug:
+    msg: "{{ current_network_config.stdout_lines }}"
+    verbosity: 1
+
+- name: Verificar conectividad IPv6 (si está habilitado)
+  ansible.builtin.command: ping6 -c 2 {{ ipv6_gateway }}
+  register: ipv6_connectivity_test
+  changed_when: false
+  failed_when: false
+  when: 
+    - ipv6_enabled | default(false)
+    - ipv6_gateway is defined
+
+- name: Mostrar resultado test IPv6
+  ansible.builtin.debug:
+    msg: "IPv6 conectividad: {{ 'OK' if ipv6_connectivity_test.rc == 0 else 'FAILED - Verificar configuración' }}"
+  when: 
+    - ipv6_enabled | default(false)
+    - ipv6_connectivity_test is defined

@@ -1,0 +1,47 @@
+# Configuración de fail2ban para protección SSH
+# Generado por Ansible - No editar manualmente
+
+[DEFAULT]
+# Ban hosts for 1 hour:
+bantime = 3600
+
+# Override /etc/fail2ban/jail.d/00-firewalld.conf:
+banaction = iptables-multiport
+
+# Email notifications
+destemail = {{ admin_email | default('root@localhost') }}
+sendername = Fail2Ban-{{ inventory_hostname }}
+mta = sendmail
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 3600
+
+[nginx-http-auth]
+enabled = true
+filter = nginx-http-auth
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 5
+
+[nginx-dos]
+enabled = true
+filter = nginx-dos
+port = http,https
+logpath = /var/log/nginx/access.log
+maxretry = 240
+findtime = 60
+bantime = 600
+
+[recidive]
+enabled = true
+filter = recidive
+logpath = /var/log/fail2ban.log
+action = iptables-allports[name=recidive]
+bantime = 86400
+findtime = 86400
+maxretry = 5

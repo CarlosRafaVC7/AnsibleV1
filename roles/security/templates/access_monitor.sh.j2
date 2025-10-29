@@ -1,0 +1,140 @@
+#!/bin/bash
+# Script de monitoreo de acceso - Generado por Ansible
+# {{ ansible_managed_banner }}
+
+# ==============================================
+# CONFIGURACIÓN DE VARIABLES
+# ==============================================
+LOG_DIR="{{ monitoring.log_directory | default('/var/log/ansible_security') }}"
+ACCESS_LOG="$LOG_DIR/access_events.log"
+ALERT_LOG="$LOG_DIR/security_alerts.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Crear directorios si no existen
+mkdir -p "$LOG_DIR"
+
+# ==============================================
+# FUNCIONES DE MONITOREO
+# ==============================================
+log_event() {
+    echo "[$TIMESTAMP] $1" >> "$ACCESS_LOG"
+}
+
+send_alert() {
+    echo "[$TIMESTAMP] ALERT: $1" >> "$ALERT_LOG"
+    {% if monitoring.alert_email is defined %}
+    echo "$1" | mail -s "Security Alert - {{ inventory_hostname }}" {{ monitoring.alert_email }}
+    {% endif %}
+}
+
+# ==============================================
+# VERIFICAR INTENTOS DE LOGIN FALLIDOS
+# ==============================================
+check_failed_logins() {
+    FAILED_COUNT=$(grep "Failed password" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    if [ "$FAILED_COUNT" -gt {{ security.max_login_attempts | default(5) }} ]; then
+        send_alert "Múltiples intentos de login fallidos detectados: $FAILED_COUNT intentos hoy"
+    fi
+    log_event "Failed logins today: $FAILED_COUNT"
+}
+
+# ==============================================
+# VERIFICAR USUARIOS CONECTADOS
+# ==============================================
+check_active_users() {
+    ACTIVE_USERS=$(who | wc -l)
+    UNIQUE_USERS=$(who | awk '{print $1}' | sort -u | wc -l)
+    
+    log_event "Active sessions: $ACTIVE_USERS, Unique users: $UNIQUE_USERS"
+    
+    # Alertar si hay demasiadas sesiones
+    if [ "$ACTIVE_USERS" -gt 10 ]; then
+        send_alert "Número inusual de sesiones activas: $ACTIVE_USERS"
+    fi
+}
+
+# ==============================================
+# VERIFICAR ACCESOS ROOT
+# ==============================================
+check_root_access() {
+    ROOT_LOGINS=$(grep "Accepted.*root" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    if [ "$ROOT_LOGINS" -gt 0 ]; then
+        send_alert "Login directo como root detectado: $ROOT_LOGINS veces hoy"
+    fi
+    log_event "Root logins today: $ROOT_LOGINS"
+}
+
+# ==============================================
+# VERIFICAR SUDO USAGE
+# ==============================================
+check_sudo_usage() {
+    SUDO_COUNT=$(grep "sudo:" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    log_event "Sudo commands today: $SUDO_COUNT"
+    
+    # Verificar comandos sudo sospechosos
+    SUSPICIOUS_SUDO=$(grep "sudo:.*COMMAND=/bin/su\|COMMAND=/usr/bin/passwd\|COMMAND=/usr/sbin/userdel" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    if [ "$SUSPICIOUS_SUDO" -gt 0 ]; then
+        send_alert "Comandos sudo sospechosos detectados: $SUSPICIOUS_SUDO"
+    fi
+}
+
+# ==============================================
+# VERIFICAR CONEXIONES SSH
+# ==============================================
+check_ssh_connections() {
+    SSH_CONNECTIONS=$(ss -tn | grep ":22" | wc -l)
+    log_event "Active SSH connections: $SSH_CONNECTIONS"
+    
+    # Verificar conexiones desde IPs externas
+    EXTERNAL_SSH=$(ss -tn | grep ":22" | grep -v "192.168\|10\.\|172\." | wc -l)
+    if [ "$EXTERNAL_SSH" -gt 0 ]; then
+        send_alert "Conexiones SSH desde IPs externas detectadas: $EXTERNAL_SSH"
+    fi
+}
+
+# ==============================================
+# VERIFICAR ESPACIO EN DISCO
+# ==============================================
+check_disk_space() {
+    DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+    log_event "Disk usage: ${DISK_USAGE}%"
+    
+    if [ "$DISK_USAGE" -gt 90 ]; then
+        send_alert "Espacio en disco crítico: ${DISK_USAGE}% usado"
+    fi
+}
+
+# ==============================================
+# VERIFICAR PROCESOS SOSPECHOSOS
+# ==============================================
+check_suspicious_processes() {
+    # Buscar procesos con nombres sospechosos
+    SUSPICIOUS_PROCS=$(ps aux | grep -E "nc|netcat|ncat|socat|telnet.*-l|python.*-c|perl.*-e|ruby.*-e" | grep -v grep | wc -l)
+    if [ "$SUSPICIOUS_PROCS" -gt 0 ]; then
+        send_alert "Procesos potencialmente sospechosos detectados: $SUSPICIOUS_PROCS"
+        ps aux | grep -E "nc|netcat|ncat|socat|telnet.*-l|python.*-c|perl.*-e|ruby.*-e" | grep -v grep >> "$ALERT_LOG"
+    fi
+    log_event "Suspicious processes check: $SUSPICIOUS_PROCS found"
+}
+
+# ==============================================
+# EJECUTAR TODAS LAS VERIFICACIONES
+# ==============================================
+main() {
+    log_event "=== Starting security access monitor ==="
+    
+    check_failed_logins
+    check_active_users
+    check_root_access
+    check_sudo_usage
+    check_ssh_connections
+    check_disk_space
+    check_suspicious_processes
+    
+    log_event "=== Security access monitor completed ==="
+}
+
+# Ejecutar si se llama directamente
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi

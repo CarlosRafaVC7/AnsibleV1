@@ -1,0 +1,91 @@
+---
+# Variables de seguridad para el rol security
+# Configuración específica por entorno
+
+# Redes autorizadas
+esxi_network: "168.121.48.0/24"
+local_network: "192.168.1.0/24"
+management_network: "10.0.0.0/8"
+
+# Configuración de firewall
+firewall_default_policy: "DROP"
+firewall_logging: true
+
+# Puertos permitidos por defecto
+allowed_ports:
+  ssh: 22
+  http: 80
+  https: 443
+  winrm: 5985
+  winrm_ssl: 5986
+  rdp: 3389
+
+# Configuración de fail2ban
+fail2ban_bantime: 3600  # 1 hora
+fail2ban_maxretry: 3
+fail2ban_findtime: 600  # 10 minutos
+
+# Email para alertas
+admin_email: "admin@upeu.edu.pe"
+
+# Configuración de logging
+log_retention_days: 90
+security_log_level: "INFO"
+
+# Configuración de monitoreo
+monitoring_interval: 300  # 5 minutos
+enable_intrusion_detection: true
+enable_file_integrity: true
+
+# Políticas específicas del laboratorio
+academic_lab_restrictions:
+  - block_p2p: true
+  - block_gaming: false
+  - allow_development: true
+  - monitoring_level: "high"
+
+gamer_lab_restrictions:
+  - block_p2p: false
+  - block_gaming: false
+  - allow_development: false
+  - monitoring_level: "medium"
+
+# Configuración de backup de seguridad
+security_backup_enabled: true
+security_backup_retention: 30  # días
+
+# Integración con ESXi
+esxi_integration:
+  enabled: true
+  sync_policies: true
+  report_to_vcenter: false
+
+# Configuración de alertas
+alert_thresholds:
+  failed_logins: 10
+  concurrent_ssh: 5
+  disk_usage: 90
+  memory_usage: 95
+  cpu_usage: 95
+
+# Servicios a deshabilitar por seguridad
+disabled_services:
+  linux:
+    - telnet
+    - ftp
+    - rsh
+    - rlogin
+    - avahi-daemon
+    - cups
+  windows:
+    - Telnet
+    - Fax
+    - RemoteRegistry
+    - Browser
+    - TapiSrv
+
+# Configuración de cifrado
+encryption_settings:
+  ssh_cipher: "aes256-ctr"
+  ssl_protocols: "TLSv1.2,TLSv1.3"
+  key_size: 2048

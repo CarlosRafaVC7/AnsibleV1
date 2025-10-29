@@ -1,0 +1,113 @@
+#!/bin/bash
+# Script de backup MySQL - Generado por Ansible
+# {{ ansible_managed_banner }}
+
+# ==============================================
+# CONFIGURACIÓN DE VARIABLES
+# ==============================================
+BACKUP_DIR="{{ backup.directory }}/databases"
+MYSQL_USER="root"
+MYSQL_PASS="{{ vault_mysql_root_password }}"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS={{ backup.retention_days | default(7) }}
+
+# Archivos de log
+LOG_FILE="$BACKUP_DIR/backup_$DATE.log"
+ERROR_LOG="$BACKUP_DIR/backup_errors.log"
+
+# ==============================================
+# FUNCIONES
+# ==============================================
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" | tee -a "$ERROR_LOG"
+}
+
+# ==============================================
+# CREAR DIRECTORIOS
+# ==============================================
+mkdir -p "$BACKUP_DIR"
+
+log_message "=== Iniciando backup de MySQL ==="
+
+# ==============================================
+# BACKUP DE TODAS LAS BASES DE DATOS
+# ==============================================
+DATABASES=$(mysql -u"$MYSQL_USER" -p"$MYSQL_PASS" -e "SHOW DATABASES;" | tr -d "| " | grep -v Database)
+
+for db in $DATABASES; do
+    # Saltar bases de datos del sistema
+    if [[ "$db" != "information_schema" && "$db" != "performance_schema" && "$db" != "mysql" && "$db" != "sys" ]]; then
+        log_message "Respaldando base de datos: $db"
+        
+        BACKUP_FILE="$BACKUP_DIR/${db}_$DATE.sql"
+        
+        if mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASS" \
+            --single-transaction \
+            --routines \
+            --triggers \
+            --events \
+            --add-drop-database \
+            --databases "$db" > "$BACKUP_FILE"; then
+            
+            # Comprimir el backup
+            gzip "$BACKUP_FILE"
+            log_message "Backup completado: ${BACKUP_FILE}.gz"
+        else
+            log_error "Error al respaldar la base de datos: $db"
+        fi
+    fi
+done
+
+# ==============================================
+# BACKUP DE CONFIGURACIÓN MYSQL
+# ==============================================
+log_message "Respaldando configuración de MySQL"
+cp /etc/mysql/mysql.conf.d/security.cnf "$BACKUP_DIR/mysql_config_$DATE.cnf" 2>/dev/null || log_error "Error al respaldar configuración"
+
+# ==============================================
+# LIMPIAR BACKUPS ANTIGUOS
+# ==============================================
+log_message "Limpiando backups antiguos (más de $RETENTION_DAYS días)"
+find "$BACKUP_DIR" -name "*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
+find "$BACKUP_DIR" -name "*.cnf" -type f -mtime +$RETENTION_DAYS -delete
+find "$BACKUP_DIR" -name "backup_*.log" -type f -mtime +$RETENTION_DAYS -delete
+
+# ==============================================
+# VERIFICAR INTEGRIDAD DE BACKUPS
+# ==============================================
+log_message "Verificando integridad de backups"
+for backup_file in "$BACKUP_DIR"/*_$DATE.sql.gz; do
+    if [ -f "$backup_file" ]; then
+        if gzip -t "$backup_file"; then
+            log_message "Backup verificado: $(basename "$backup_file")"
+        else
+            log_error "Backup corrupto: $(basename "$backup_file")"
+        fi
+    fi
+done
+
+# ==============================================
+# ESTADÍSTICAS FINALES
+# ==============================================
+BACKUP_SIZE=$(du -sh "$BACKUP_DIR" | cut -f1)
+BACKUP_COUNT=$(ls -1 "$BACKUP_DIR"/*_$DATE.sql.gz 2>/dev/null | wc -l)
+
+log_message "=== Backup completado ==="
+log_message "Archivos respaldados: $BACKUP_COUNT"
+log_message "Tamaño total del directorio de backup: $BACKUP_SIZE"
+
+# Enviar notificación si está configurado
+{% if monitoring.alert_email is defined %}
+if [ -s "$ERROR_LOG" ]; then
+    mail -s "Error en backup MySQL - {{ inventory_hostname }}" {{ monitoring.alert_email }} < "$ERROR_LOG"
+else
+    echo "Backup MySQL completado exitosamente. Archivos: $BACKUP_COUNT, Tamaño: $BACKUP_SIZE" | \
+    mail -s "Backup MySQL exitoso - {{ inventory_hostname }}" {{ monitoring.alert_email }}
+fi
+{% endif %}
+
+log_message "Script de backup finalizado"

@@ -1,0 +1,76 @@
+---
+# Configuración SSH en macOS
+
+- name: Crear directorio .ssh para el usuario principal
+  ansible.builtin.file:
+    path: "/Users/{{ default_user }}/.ssh"
+    state: directory
+    owner: "{{ default_user }}"
+    group: staff
+    mode: '0700'
+
+- name: Crear directorio .ssh para el usuario de laboratorio
+  ansible.builtin.file:
+    path: "/Users/{{ lab_user }}/.ssh"
+    state: directory
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0700'
+  become: yes
+
+- name: Generar par de claves SSH para el usuario principal
+  community.crypto.openssh_keypair:
+    path: "{{ ssh_key_path }}"
+    type: "{{ ssh_key_type }}"
+    owner: "{{ default_user }}"
+    group: staff
+    mode: '0600'
+  register: main_ssh_key
+
+- name: Generar par de claves SSH para el usuario de laboratorio
+  community.crypto.openssh_keypair:
+    path: "/Users/{{ lab_user }}/.ssh/id_{{ ssh_key_type }}"
+    type: "{{ ssh_key_type }}"
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0600'
+  become: yes
+  register: lab_ssh_key
+
+- name: Agregar clave pública al authorized_keys del usuario principal
+  ansible.builtin.authorized_key:
+    user: "{{ default_user }}"
+    key: "{{ main_ssh_key.public_key }}"
+    state: present
+
+- name: Agregar clave pública al authorized_keys del usuario de laboratorio
+  ansible.builtin.authorized_key:
+    user: "{{ lab_user }}"
+    key: "{{ lab_ssh_key.public_key }}"
+    state: present
+  become: yes
+
+- name: Configurar SSH daemon (sshd_config)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes
+  become: yes
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication yes' }
+    - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+    - { regexp: '^#?Port', line: 'Port {{ ssh_port }}' }
+  notify: restart_ssh
+
+- name: Mostrar información de claves generadas
+  ansible.builtin.debug:
+    msg:
+      - "=== Claves SSH generadas ==="
+      - "Usuario principal ({{ default_user }}):"
+      - "  Clave privada: {{ ssh_key_path }}"
+      - "  Clave pública: {{ ssh_key_path }}.pub"
+      - "Usuario laboratorio ({{ lab_user }}):"
+      - "  Clave privada: /Users/{{ lab_user }}/.ssh/id_{{ ssh_key_type }}"
+      - "  Clave pública: /Users/{{ lab_user }}/.ssh/id_{{ ssh_key_type }}.pub"

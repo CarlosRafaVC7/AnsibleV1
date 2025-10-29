@@ -1,0 +1,91 @@
+# {{ ansible_managed_banner }}
+# PowerShell script para configurar IPv6 en Windows
+# Host: {{ inventory_hostname }}
+# Generated: {{ ansible_date_time.iso8601 }}
+
+# Función para configurar IPv6
+function Configure-IPv6Network {
+    param(
+        [string]$InterfaceName = "Ethernet",
+        [string]$IPv6Address = "{{ ipv6_address }}",
+        [string]$IPv6Gateway = "{{ ipv6_gateway }}",
+        [string]$IPv4Address = "{{ ipv4_address if ipv4_enabled else '' }}",
+        [string]$IPv4Gateway = "{{ ipv4_gateway if ipv4_enabled else '' }}"
+    )
+
+    Write-Host "Configurando red para {{ inventory_hostname }}..."
+
+    # Obtener el adaptador de red
+    $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    if (-not $adapter) {
+        Write-Error "No se encontró adaptador de red activo"
+        return
+    }
+
+    $interfaceIndex = $adapter.InterfaceIndex
+    Write-Host "Usando adaptador: $($adapter.Name) (Index: $interfaceIndex)"
+
+{% if ipv6_enabled %}
+    # Configurar IPv6
+    try {
+        # Remover configuraciones IPv6 existentes
+        Remove-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv6 -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-NetRoute -InterfaceIndex $interfaceIndex -AddressFamily IPv6 -Confirm:$false -ErrorAction SilentlyContinue
+
+        # Configurar dirección IPv6 estática
+        New-NetIPAddress -InterfaceIndex $interfaceIndex -IPAddress "{{ ipv6_address.split('/')[0] }}" -PrefixLength {{ ipv6_address.split('/')[1] }} -AddressFamily IPv6
+        Write-Host "IPv6 configurado: {{ ipv6_address }}"
+
+        # Configurar gateway IPv6
+        New-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "::/0" -NextHop "{{ ipv6_gateway }}" -AddressFamily IPv6
+        Write-Host "Gateway IPv6 configurado: {{ ipv6_gateway }}"
+
+    } catch {
+        Write-Warning "Error configurando IPv6: $($_.Exception.Message)"
+    }
+{% endif %}
+
+{% if ipv4_enabled %}
+    # Configurar IPv4 como fallback
+    try {
+        # Remover configuraciones IPv4 existentes
+        Remove-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-NetRoute -InterfaceIndex $interfaceIndex -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+
+        # Configurar dirección IPv4 estática
+        New-NetIPAddress -InterfaceIndex $interfaceIndex -IPAddress "{{ ipv4_address.split('/')[0] }}" -PrefixLength {{ ipv4_address.split('/')[1] }} -AddressFamily IPv4
+        Write-Host "IPv4 configurado: {{ ipv4_address }}"
+
+        # Configurar gateway IPv4
+        New-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "0.0.0.0/0" -NextHop "{{ ipv4_gateway }}" -AddressFamily IPv4
+        Write-Host "Gateway IPv4 configurado: {{ ipv4_gateway }}"
+
+    } catch {
+        Write-Warning "Error configurando IPv4: $($_.Exception.Message)"
+    }
+{% endif %}
+
+    # Configurar DNS servers
+    $dnsServers = @(
+{% for dns in dns_servers %}
+        "{{ dns }}"{{ "," if not loop.last else "" }}
+{% endfor %}
+    )
+
+    Set-DnsClientServerAddress -InterfaceIndex $interfaceIndex -ServerAddresses $dnsServers
+    Write-Host "DNS servers configurados: $($dnsServers -join ', ')"
+
+    # Configurar perfil de red como Privado
+    Set-NetConnectionProfile -InterfaceIndex $interfaceIndex -NetworkCategory Private
+    Write-Host "Perfil de red configurado como Privado"
+
+    # Mostrar configuración final
+    Write-Host "`n=== Configuración de red final ==="
+    Get-NetIPAddress -InterfaceIndex $interfaceIndex | Format-Table
+    Get-NetRoute -InterfaceIndex $interfaceIndex | Where-Object { $_.DestinationPrefix -eq "::/0" -or $_.DestinationPrefix -eq "0.0.0.0/0" } | Format-Table
+}
+
+# Ejecutar configuración
+Configure-IPv6Network
+
+Write-Host "Configuración de red completada para {{ inventory_hostname }}"

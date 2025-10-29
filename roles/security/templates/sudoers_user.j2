@@ -1,0 +1,22 @@
+# Configuración sudo para {{ item.username }}
+# Generado por Ansible - {{ ansible_managed_banner }}
+
+{% if item.sudo_nopasswd is defined and item.sudo_nopasswd %}
+# Usuario {{ item.username }} puede ejecutar comandos específicos sin contraseña
+{% if item.sudo_commands is defined %}
+{% for command in item.sudo_commands %}
+{{ item.username }} ALL=(ALL) NOPASSWD: {{ command }}
+{% endfor %}
+{% else %}
+# Acceso sudo limitado sin contraseña para comandos de servicio
+{{ item.username }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status *, /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *
+{% endif %}
+{% else %}
+# Usuario {{ item.username }} requiere contraseña para sudo
+{{ item.username }} ALL=(ALL:ALL) ALL
+{% endif %}
+
+# Configuración de seguridad adicional
+Defaults:{{ item.username }} timestamp_timeout=15
+Defaults:{{ item.username }} passwd_timeout=5
+Defaults:{{ item.username }} passwd_tries=3

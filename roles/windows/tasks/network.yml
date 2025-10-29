@@ -1,0 +1,127 @@
+---
+# Configuración de red para Windows
+
+- name: Obtener información de adaptadores de red
+  ansible.windows.win_shell: |
+    Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, InterfaceDescription, LinkSpeed | Format-Table -AutoSize
+  register: network_adapters
+  changed_when: false
+
+- name: Mostrar adaptadores de red disponibles
+  ansible.builtin.debug:
+    msg: "{{ network_adapters.stdout_lines }}"
+
+- name: Obtener configuración IP actual
+  ansible.windows.win_shell: |
+    Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Ethernet*"} | Select-Object InterfaceAlias, IPAddress, AddressFamily | Format-Table -AutoSize
+  register: current_ip_config
+  changed_when: false
+
+- name: Mostrar configuración IP actual
+  ansible.builtin.debug:
+    msg: "{{ current_ip_config.stdout_lines }}"
+
+- name: Generar script de configuración IPv6
+  ansible.builtin.template:
+    src: windows_ipv6_config.ps1.j2
+    dest: "C:\\ansible_monitor\\configure_ipv6.ps1"
+  when: ipv6_enabled | default(false)
+
+- name: Configurar IPv6 estático (si está habilitado)
+  ansible.windows.win_shell: |
+    # Obtener el primer adaptador activo
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+    $interfaceIndex = $adapter.InterfaceIndex
+    
+    # Remover configuraciones IPv6 existentes
+    Remove-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv6 -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-NetRoute -InterfaceIndex $interfaceIndex -AddressFamily IPv6 -Confirm:$false -ErrorAction SilentlyContinue
+    
+    # Configurar IPv6 estático
+    New-NetIPAddress -InterfaceIndex $interfaceIndex -IPAddress "{{ ipv6_address.split('/')[0] }}" -PrefixLength {{ ipv6_address.split('/')[1] }} -AddressFamily IPv6
+    New-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "::/0" -NextHop "{{ ipv6_gateway }}" -AddressFamily IPv6
+    
+    Write-Output "IPv6 configurado: {{ ipv6_address }}"
+  register: ipv6_config_result
+  when: 
+    - ipv6_enabled | default(false)
+    - ipv6_config_method == "static"
+  failed_when: false
+
+- name: Configurar IPv4 como fallback (si está habilitado)
+  ansible.windows.win_shell: |
+    # Obtener el primer adaptador activo
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+    $interfaceIndex = $adapter.InterfaceIndex
+    
+    # Remover configuraciones IPv4 existentes
+    Remove-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-NetRoute -InterfaceIndex $interfaceIndex -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+    
+    # Configurar IPv4 estático
+    New-NetIPAddress -InterfaceIndex $interfaceIndex -IPAddress "{{ ipv4_address.split('/')[0] }}" -PrefixLength {{ ipv4_address.split('/')[1] }} -AddressFamily IPv4
+    New-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "0.0.0.0/0" -NextHop "{{ ipv4_gateway }}" -AddressFamily IPv4
+    
+    Write-Output "IPv4 configurado: {{ ipv4_address }}"
+  register: ipv4_config_result
+  when: 
+    - ipv4_enabled | default(true)
+    - ipv6_config_method == "static"
+  failed_when: false
+
+- name: Configurar servidores DNS
+  ansible.windows.win_shell: |
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+    $interfaceIndex = $adapter.InterfaceIndex
+    
+    $dnsServers = @({{ dns_servers | map('quote') | join(', ') }})
+    Set-DnsClientServerAddress -InterfaceIndex $interfaceIndex -ServerAddresses $dnsServers
+    
+    Write-Output "DNS configurado: $($dnsServers -join ', ')"
+  register: dns_config_result
+  when: ipv6_enabled | default(false)
+
+- name: Configurar perfil de red como Privado
+  ansible.windows.win_shell: |
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+    Set-NetConnectionProfile -InterfaceIndex $adapter.InterfaceIndex -NetworkCategory Private
+    Write-Output "Perfil de red configurado como Privado"
+  register: network_profile_result
+
+- name: Configurar reglas de firewall para WinRM
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: yes
+  loop: "{{ firewall_rules | default([]) }}"
+
+- name: Verificar conectividad IPv6 (si está habilitado)
+  ansible.windows.win_shell: ping -6 {{ ipv6_gateway }} -n 2
+  register: ipv6_ping_test
+  changed_when: false
+  failed_when: false
+  when: 
+    - ipv6_enabled | default(false)
+    - ipv6_gateway is defined
+
+- name: Mostrar configuración final de red
+  ansible.windows.win_shell: |
+    Write-Output "=== Configuración final de red ==="
+    Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Ethernet*"} | Format-Table -AutoSize
+    Get-NetRoute | Where-Object {$_.DestinationPrefix -eq "::/0" -or $_.DestinationPrefix -eq "0.0.0.0/0"} | Format-Table -AutoSize
+  register: final_network_config
+  changed_when: false
+
+- name: Mostrar resumen de configuración de red
+  ansible.builtin.debug:
+    msg:
+      - "=== Configuración de red Windows ==="
+      - "IPv6 resultado: {{ ipv6_config_result.stdout if ipv6_config_result is defined else 'No configurado' }}"
+      - "IPv4 resultado: {{ ipv4_config_result.stdout if ipv4_config_result is defined else 'No configurado' }}"
+      - "DNS resultado: {{ dns_config_result.stdout if dns_config_result is defined else 'No configurado' }}"
+      - "Perfil de red: {{ network_profile_result.stdout if network_profile_result is defined else 'Sin cambios' }}"
+      - "IPv6 conectividad: {{ 'OK' if ipv6_ping_test.rc == 0 else 'FAILED' if ipv6_ping_test is defined else 'No probado' }}"

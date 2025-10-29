@@ -1,0 +1,391 @@
+---
+# Configuración de seguridad para bases de datos y servicios críticos
+# Implementación de políticas de seguridad para servicios
+
+- name: "🗄️ CONFIGURACIÓN DE SEGURIDAD PARA BD Y SERVICIOS"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "🗄️ CONFIGURANDO SEGURIDAD DE BD Y SERVICIOS"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_system }}"
+      - "Configurando MySQL, PostgreSQL, Apache, IIS"
+      - "=================================================="
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD MYSQL
+# ==============================================
+- name: "Configurar seguridad de MySQL/MariaDB"
+  block:
+    - name: "📦 Instalar MySQL/MariaDB"
+      ansible.builtin.package:
+        name:
+          - "{{ 'mysql-server' if ansible_distribution == 'Ubuntu' else 'mariadb-server' }}"
+          - "{{ 'mysql-client' if ansible_distribution == 'Ubuntu' else 'mariadb-client' }}"
+          - python3-pymysql
+        state: present
+
+    - name: "🔧 Iniciar y habilitar servicio MySQL"
+      ansible.builtin.systemd:
+        name: "{{ 'mysql' if ansible_distribution == 'Ubuntu' else 'mariadb' }}"
+        state: started
+        enabled: yes
+
+    - name: "🔒 Configurar contraseña root de MySQL"
+      community.mysql.mysql_user:
+        name: root
+        password: "{{ vault_mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: present
+      no_log: true
+
+    - name: "🗄️ Crear archivo de credenciales MySQL para root"
+      ansible.builtin.template:
+        src: "mysql_root.cnf.j2"
+        dest: "/root/.my.cnf"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: "👤 Crear usuario de aplicación MySQL"
+      community.mysql.mysql_user:
+        name: "{{ vault_db_app_user }}"
+        password: "{{ vault_mysql_app_password }}"
+        priv: "labdb.*:ALL"
+        host: "localhost"
+        state: present
+        login_user: root
+        login_password: "{{ vault_mysql_root_password }}"
+      no_log: true
+
+    - name: "🗃️ Crear base de datos del laboratorio"
+      community.mysql.mysql_db:
+        name: labdb
+        state: present
+        login_user: root
+        login_password: "{{ vault_mysql_root_password }}"
+
+    - name: "⚙️ Configurar MySQL de forma segura"
+      ansible.builtin.template:
+        src: "mysql_secure.cnf.j2"
+        dest: "/etc/mysql/mysql.conf.d/security.cnf"
+        backup: yes
+      notify: restart mysql
+
+    - name: "🔍 Configurar logs de auditoría MySQL"
+      ansible.builtin.blockinfile:
+        path: "/etc/mysql/mysql.conf.d/security.cnf"
+        block: |
+          # Configuración de auditoría y logging
+          log_error = /var/log/mysql/error.log
+          slow_query_log = 1
+          slow_query_log_file = /var/log/mysql/slow.log
+          long_query_time = 2
+          log_queries_not_using_indexes = 1
+          
+          # Logging de conexiones
+          general_log = 1
+          general_log_file = /var/log/mysql/general.log
+        marker: "# {mark} ANSIBLE MANAGED MYSQL LOGGING"
+
+    - name: "📁 Crear directorio de logs MySQL"
+      ansible.builtin.file:
+        path: /var/log/mysql
+        state: directory
+        owner: mysql
+        group: mysql
+        mode: "0755"
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - database
+    - mysql
+    - security
+    - linux
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD POSTGRESQL
+# ==============================================
+- name: "Configurar seguridad de PostgreSQL"
+  block:
+    - name: "📦 Instalar PostgreSQL"
+      ansible.builtin.package:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2
+        state: present
+
+    - name: "🔧 Iniciar y habilitar PostgreSQL"
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: "🔒 Configurar contraseña para usuario postgres"
+      community.postgresql.postgresql_user:
+        name: postgres
+        password: "{{ vault_postgresql_password }}"
+      become_user: postgres
+      no_log: true
+
+    - name: "👤 Crear usuario de aplicación PostgreSQL"
+      community.postgresql.postgresql_user:
+        name: "{{ vault_db_app_user }}"
+        password: "{{ vault_postgresql_password }}"
+        role_attr_flags: CREATEDB
+      become_user: postgres
+      no_log: true
+
+    - name: "🗃️ Crear base de datos del laboratorio"
+      community.postgresql.postgresql_db:
+        name: labdb
+        owner: "{{ vault_db_app_user }}"
+      become_user: postgres
+
+    - name: "⚙️ Configurar PostgreSQL de forma segura"
+      ansible.builtin.template:
+        src: "postgresql.conf.j2"
+        dest: "/etc/postgresql/{{ ansible_postgresql_version }}/main/postgresql.conf"
+        backup: yes
+      notify: restart postgresql
+
+    - name: "🛡️ Configurar autenticación PostgreSQL"
+      ansible.builtin.template:
+        src: "pg_hba.conf.j2"
+        dest: "/etc/postgresql/{{ ansible_postgresql_version }}/main/pg_hba.conf"
+        backup: yes
+      notify: restart postgresql
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  vars:
+    ansible_postgresql_version: "{{ ansible_facts['postgresql_version'] | default('14') }}"
+  tags:
+    - database
+    - postgresql
+    - security
+    - linux
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD APACHE
+# ==============================================
+- name: "Configurar seguridad de Apache"
+  block:
+    - name: "📦 Instalar Apache y módulos de seguridad"
+      ansible.builtin.package:
+        name:
+          - apache2
+          - libapache2-mod-security2
+          - libapache2-mod-evasive
+        state: present
+
+    - name: "🔧 Habilitar módulos de seguridad Apache"
+      ansible.builtin.apache2_module:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - security2
+        - evasive24
+        - headers
+        - ssl
+        - rewrite
+      notify: restart apache2
+
+    - name: "⚙️ Configurar security headers"
+      ansible.builtin.template:
+        src: "apache_security.conf.j2"
+        dest: "/etc/apache2/conf-available/security-headers.conf"
+      notify: restart apache2
+
+    - name: "🔗 Habilitar configuración de seguridad"
+      ansible.builtin.command: a2enconf security-headers
+      notify: restart apache2
+
+    - name: "🛡️ Configurar mod_security"
+      ansible.builtin.template:
+        src: "modsecurity.conf.j2"
+        dest: "/etc/modsecurity/modsecurity.conf"
+        backup: yes
+      notify: restart apache2
+
+    - name: "🔍 Configurar logs de seguridad Apache"
+      ansible.builtin.blockinfile:
+        path: "/etc/apache2/sites-available/000-default.conf"
+        insertbefore: "</VirtualHost>"
+        block: |
+          # Logs de seguridad personalizados
+          CustomLog ${APACHE_LOG_DIR}/security.log "%h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\" %D"
+          LogLevel warn security2:info
+        marker: "# {mark} ANSIBLE MANAGED SECURITY LOGGING"
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - webserver
+    - apache
+    - security
+    - linux
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD IIS (WINDOWS)
+# ==============================================
+- name: "Configurar seguridad de IIS"
+  block:
+    - name: "🔧 Habilitar característica IIS"
+      ansible.windows.win_feature:
+        name:
+          - IIS-WebServerRole
+          - IIS-WebServer
+          - IIS-HttpErrors
+          - IIS-HttpLogging
+          - IIS-Security
+          - IIS-RequestFiltering
+        state: present
+
+    - name: "🛡️ Configurar filtrado de solicitudes IIS"
+      ansible.windows.win_shell: |
+        Import-Module WebAdministration
+        
+        # Configurar límites de solicitudes
+        Set-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/requestLimits" -Name "maxAllowedContentLength" -Value 30000000
+        Set-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/requestLimits" -Name "maxUrl" -Value 4096
+        Set-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/requestLimits" -Name "maxQueryString" -Value 2048
+        
+        # Ocultar headers del servidor
+        Set-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-Powered-By';value=''}
+        
+        # Configurar headers de seguridad
+        Add-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-Content-Type-Options';value='nosniff'}
+        Add-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-Frame-Options';value='SAMEORIGIN'}
+        Add-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-XSS-Protection';value='1; mode=block'}
+
+    - name: "🔍 Configurar logging de IIS"
+      ansible.windows.win_shell: |
+        Import-Module WebAdministration
+        
+        # Configurar logging detallado
+        Set-WebConfigurationProperty -Filter "system.webServer/httpLogging" -Name "enabled" -Value $true
+        Set-WebConfigurationProperty -Filter "system.webServer/httpLogging" -Name "logExtFileFlags" -Value "Date,Time,ClientIP,UserName,SiteName,ComputerName,ServerIP,Method,UriStem,UriQuery,HttpStatus,Win32Status,BytesSent,BytesRecv,TimeTaken,ServerPort,UserAgent,Cookie,Referer,ProtocolVersion,Host,HttpSubStatus"
+
+    - name: "🚫 Deshabilitar métodos HTTP innecesarios"
+      ansible.windows.win_shell: |
+        Import-Module WebAdministration
+        
+        # Deshabilitar métodos HTTP peligrosos
+        Add-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/verbs" -Name "." -Value @{verb='TRACE';allowed='false'}
+        Add-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/verbs" -Name "." -Value @{verb='TRACK';allowed='false'}
+        Add-WebConfigurationProperty -Filter "system.webServer/security/requestFiltering/verbs" -Name "." -Value @{verb='DEBUG';allowed='false'}
+
+  when: ansible_os_family == "Windows"
+  tags:
+    - webserver
+    - iis
+    - security
+    - windows
+
+# ==============================================
+# CONFIGURACIÓN DE ANTIVIRUS Y PROTECCIÓN
+# ==============================================
+- name: "Configurar protección antivirus"
+  block:
+    - name: "🦠 Instalar ClamAV en Linux"
+      ansible.builtin.package:
+        name:
+          - clamav
+          - clamav-daemon
+          - clamav-freshclam
+        state: present
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "🔄 Actualizar definiciones de virus"
+      ansible.builtin.command: freshclam
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+      ignore_errors: yes
+
+    - name: "⏰ Configurar escaneo programado"
+      ansible.builtin.cron:
+        name: "Escaneo antivirus diario"
+        minute: "0"
+        hour: "2"
+        job: "/usr/bin/clamscan -r /home --log=/var/log/clamav/scan.log --infected --remove"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "🛡️ Configurar Windows Defender"
+      ansible.windows.win_shell: |
+        # Habilitar protección en tiempo real
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        
+        # Configurar escaneo programado
+        Set-MpPreference -ScanScheduleDay Everyday
+        Set-MpPreference -ScanScheduleTime 02:00:00
+        
+        # Habilitar protección de red
+        Set-MpPreference -EnableNetworkProtection Enabled
+        
+        # Actualizar definiciones
+        Update-MpSignature
+      when: ansible_os_family == "Windows"
+
+  tags:
+    - antivirus
+    - security
+    - protection
+
+# ==============================================
+# CONFIGURACIÓN DE BACKUP DE BD
+# ==============================================
+- name: "Configurar backup de bases de datos"
+  block:
+    - name: "📁 Crear directorio de backup"
+      ansible.builtin.file:
+        path: "{{ backup.directory }}/databases"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "📜 Crear script de backup MySQL"
+      ansible.builtin.template:
+        src: "mysql_backup.sh.j2"
+        dest: "/usr/local/bin/mysql_backup.sh"
+        mode: "0700"
+        owner: root
+        group: root
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "⏰ Configurar backup automático"
+      ansible.builtin.cron:
+        name: "Backup diario de bases de datos"
+        minute: "30"
+        hour: "1"
+        job: "/usr/local/bin/mysql_backup.sh"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+  tags:
+    - backup
+    - database
+    - security
+
+# ==============================================
+# VALIDACIÓN DE SERVICIOS
+# ==============================================
+- name: "✅ Validar configuración de servicios"
+  block:
+    - name: "🔍 Verificar estado de servicios"
+      ansible.builtin.service_facts:
+
+    - name: "📊 Mostrar resumen de servicios configurados"
+      ansible.builtin.debug:
+        msg:
+          - "=== SERVICIOS DE BD CONFIGURADOS ==="
+          - "Host: {{ inventory_hostname }}"
+          - "MySQL/MariaDB: {{ '✅ Running' if ansible_facts.services['mysql.service'].state == 'running' or ansible_facts.services['mariadb.service'].state == 'running' else '❌ Stopped' }}"
+          - "PostgreSQL: {{ '✅ Running' if ansible_facts.services['postgresql.service'].state == 'running' else '❌ Stopped' }}"
+          - "Apache: {{ '✅ Running' if ansible_facts.services['apache2.service'].state == 'running' else '❌ Stopped' }}"
+          - "ClamAV: {{ '✅ Running' if ansible_facts.services['clamav-daemon.service'].state == 'running' else '❌ Stopped' }}"
+          - "Estado: ✅ Configuración completada"
+
+  tags:
+    - validation
+    - services

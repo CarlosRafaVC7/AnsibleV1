@@ -1,0 +1,151 @@
+---
+# Tareas específicas para VirtualBox local
+# Crear y configurar VMs en VirtualBox usando vboxmanage CLI
+
+- name: Verificar que VirtualBox esté instalado
+  ansible.builtin.command: vboxmanage --version
+  register: vbox_version
+  failed_when: false
+  changed_when: false
+
+- name: Fallar si VirtualBox no está disponible
+  ansible.builtin.fail:
+    msg: "VirtualBox no está instalado o no está en PATH"
+  when: vbox_version.rc != 0
+
+- name: Mostrar versión de VirtualBox
+  ansible.builtin.debug:
+    msg: "VirtualBox versión: {{ vbox_version.stdout }}"
+
+- name: Verificar si VM Académico ya existe
+  ansible.builtin.command: vboxmanage showvminfo "{{ vbox_academico_name | default('Ubuntu-Academico') }}"
+  register: vm_academico_exists
+  failed_when: false
+  changed_when: false
+
+- name: Crear VM Ubuntu (Laboratorio Académico) en VirtualBox
+  ansible.builtin.shell: |
+    vboxmanage createvm --name "{{ vbox_academico_name | default('Ubuntu-Academico') }}" \
+      --ostype "Ubuntu_64" --register
+    vboxmanage modifyvm "{{ vbox_academico_name | default('Ubuntu-Academico') }}" \
+      --memory {{ vbox_academico_memory | default(4096) }} \
+      --cpus {{ vbox_academico_cpus | default(2) }} \
+      --vram 128 \
+      --graphicscontroller vmsvga \
+      --nic1 nat --nictype1 82540EM \
+      --nic2 hostonly --nictype2 82540EM \
+      --hostonlyadapter2 "{{ vbox_hostonly_adapter | default('vboxnet0') }}" \
+      --audio-driver pulse --audiocontroller hda \
+      --usb on --usbehci on
+    vboxmanage createhd --filename "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_academico_name | default('Ubuntu-Academico') }}/{{ vbox_academico_name | default('Ubuntu-Academico') }}.vdi" \
+      --size {{ vbox_academico_disk | default(40960) }} --format VDI
+    vboxmanage storagectl "{{ vbox_academico_name | default('Ubuntu-Academico') }}" \
+      --name "SATA Controller" --add sata --controller IntelAHCI
+    vboxmanage storageattach "{{ vbox_academico_name | default('Ubuntu-Academico') }}" \
+      --storagectl "SATA Controller" --port 0 --device 0 --type hdd \
+      --medium "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_academico_name | default('Ubuntu-Academico') }}/{{ vbox_academico_name | default('Ubuntu-Academico') }}.vdi"
+  when: 
+    - vm_academico_exists.rc != 0
+    - create_vbox_academico | default(true)
+
+- name: Verificar si VM Gamer ya existe
+  ansible.builtin.command: vboxmanage showvminfo "{{ vbox_gamer_name | default('Windows-Gamer') }}"
+  register: vm_gamer_exists
+  failed_when: false
+  changed_when: false
+
+- name: Crear VM Windows (Laboratorio Gamer) en VirtualBox
+  ansible.builtin.shell: |
+    vboxmanage createvm --name "{{ vbox_gamer_name | default('Windows-Gamer') }}" \
+      --ostype "Windows11_64" --register
+    vboxmanage modifyvm "{{ vbox_gamer_name | default('Windows-Gamer') }}" \
+      --memory {{ vbox_gamer_memory | default(8192) }} \
+      --cpus {{ vbox_gamer_cpus | default(4) }} \
+      --vram 256 \
+      --graphicscontroller vboxsvga \
+      --nic1 nat --nictype1 82540EM \
+      --nic2 hostonly --nictype2 82540EM \
+      --hostonlyadapter2 "{{ vbox_hostonly_adapter | default('vboxnet0') }}" \
+      --audio-driver pulse --audiocontroller hda \
+      --usb on --usbehci on --usbxhci on
+    vboxmanage createhd --filename "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_gamer_name | default('Windows-Gamer') }}/{{ vbox_gamer_name | default('Windows-Gamer') }}.vdi" \
+      --size {{ vbox_gamer_disk | default(81920) }} --format VDI
+    vboxmanage storagectl "{{ vbox_gamer_name | default('Windows-Gamer') }}" \
+      --name "SATA Controller" --add sata --controller IntelAHCI
+    vboxmanage storageattach "{{ vbox_gamer_name | default('Windows-Gamer') }}" \
+      --storagectl "SATA Controller" --port 0 --device 0 --type hdd \
+      --medium "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_gamer_name | default('Windows-Gamer') }}/{{ vbox_gamer_name | default('Windows-Gamer') }}.vdi"
+  when: 
+    - vm_gamer_exists.rc != 0
+    - create_vbox_gamer | default(true)
+
+- name: Verificar si VM macOS ya existe
+  ansible.builtin.command: vboxmanage showvminfo "{{ vbox_macos_name | default('macOS-Mojave-Test') }}"
+  register: vm_macos_exists
+  failed_when: false
+  changed_when: false
+
+- name: Crear VM macOS (Testing) en VirtualBox
+  ansible.builtin.shell: |
+    vboxmanage createvm --name "{{ vbox_macos_name | default('macOS-Mojave-Test') }}" \
+      --ostype "MacOS_64" --register
+    vboxmanage modifyvm "{{ vbox_macos_name | default('macOS-Mojave-Test') }}" \
+      --memory {{ vbox_macos_memory | default(6144) }} \
+      --cpus {{ vbox_macos_cpus | default(2) }} \
+      --vram 256 \
+      --graphicscontroller vboxsvga \
+      --nic1 nat --nictype1 82540EM \
+      --nic2 hostonly --nictype2 82540EM \
+      --hostonlyadapter2 "{{ vbox_hostonly_adapter | default('vboxnet0') }}" \
+      --audio-driver pulse --audiocontroller hda \
+      --usb on --usbehci on
+    vboxmanage createhd --filename "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_macos_name | default('macOS-Mojave-Test') }}/{{ vbox_macos_name | default('macOS-Mojave-Test') }}.vdi" \
+      --size {{ vbox_macos_disk | default(61440) }} --format VDI
+    vboxmanage storagectl "{{ vbox_macos_name | default('macOS-Mojave-Test') }}" \
+      --name "SATA Controller" --add sata --controller IntelAHCI
+    vboxmanage storageattach "{{ vbox_macos_name | default('macOS-Mojave-Test') }}" \
+      --storagectl "SATA Controller" --port 0 --device 0 --type hdd \
+      --medium "{{ vbox_vms_path | default('~/VirtualBox VMs') }}/{{ vbox_macos_name | default('macOS-Mojave-Test') }}/{{ vbox_macos_name | default('macOS-Mojave-Test') }}.vdi"
+  when: 
+    - vm_macos_exists.rc != 0
+    - create_vbox_macos | default(false)
+
+- name: Montar ISOs en las VMs (si se proporcionan)
+  ansible.builtin.shell: |
+    vboxmanage storagectl "{{ item.vm_name }}" --name "IDE Controller" --add ide --controller PIIX4
+    vboxmanage storageattach "{{ item.vm_name }}" \
+      --storagectl "IDE Controller" --port 0 --device 0 --type dvddrive \
+      --medium "{{ item.iso_path }}"
+  loop:
+    - { vm_name: "{{ vbox_academico_name | default('Ubuntu-Academico') }}", iso_path: "{{ ubuntu_iso_local_path }}" }
+    - { vm_name: "{{ vbox_gamer_name | default('Windows-Gamer') }}", iso_path: "{{ windows_iso_local_path }}" }
+    - { vm_name: "{{ vbox_macos_name | default('macOS-Mojave-Test') }}", iso_path: "{{ macos_iso_local_path }}" }
+  when:
+    - item.iso_path is defined
+    - item.iso_path != ""
+    - (item.vm_name == vbox_academico_name and create_vbox_academico | default(true)) or
+      (item.vm_name == vbox_gamer_name and create_vbox_gamer | default(true)) or
+      (item.vm_name == vbox_macos_name and create_vbox_macos | default(false))
+
+- name: Configurar red host-only si no existe
+  ansible.builtin.shell: |
+    vboxmanage hostonlyif create
+    vboxmanage hostonlyif ipconfig "{{ vbox_hostonly_adapter | default('vboxnet0') }}" \
+      --ip "{{ vbox_hostonly_ip | default('192.168.56.1') }}" \
+      --netmask "{{ vbox_hostonly_netmask | default('255.255.255.0') }}"
+  failed_when: false
+  when: setup_hostonly_network | default(true)
+
+- name: Listar VMs creadas en VirtualBox
+  ansible.builtin.command: vboxmanage list vms
+  register: vbox_vms_list
+  changed_when: false
+
+- name: Mostrar resumen de VMs en VirtualBox
+  ansible.builtin.debug:
+    msg:
+      - "=== VMs en VirtualBox ==="
+      - "Versión VirtualBox: {{ vbox_version.stdout }}"
+      - "Red Host-Only: {{ vbox_hostonly_adapter | default('vboxnet0') }} ({{ vbox_hostonly_ip | default('192.168.56.1') }})"
+      - "VMs disponibles:"
+      - "{{ vbox_vms_list.stdout_lines }}"

@@ -1,0 +1,104 @@
+#!/bin/bash
+# Script de monitoreo de conexiones de red
+# Generado por Ansible - {{ ansible_date_time.iso8601 | default('manual') }}
+
+LOG_FILE="/var/log/network_security.log"
+ALERT_FILE="/tmp/security_alerts.tmp"
+
+# Función para log con timestamp
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Monitorear conexiones SSH sospechosas
+check_ssh_connections() {
+    SUSPICIOUS_SSH=$(netstat -tn | grep ':22 ' | grep ESTABLISHED | wc -l)
+    if [ $SUSPICIOUS_SSH -gt 5 ]; then
+        log_message "ALERT: Demasiadas conexiones SSH activas: $SUSPICIOUS_SSH"
+        echo "SSH_ALERT: $SUSPICIOUS_SSH conexiones" >> $ALERT_FILE
+    fi
+}
+
+# Monitorear intentos de conexión fallidos
+check_failed_logins() {
+    FAILED_LOGINS=$(grep "Failed password" /var/log/auth.log | grep "$(date '+%b %d')" | wc -l)
+    if [ $FAILED_LOGINS -gt 10 ]; then
+        log_message "ALERT: Demasiados intentos de login fallidos: $FAILED_LOGINS"
+        echo "LOGIN_ALERT: $FAILED_LOGINS intentos fallidos" >> $ALERT_FILE
+    fi
+}
+
+# Monitorear conexiones desde IPs no autorizadas
+check_unauthorized_ips() {
+    AUTHORIZED_NETWORKS=(
+        "{{ esxi_network | default('168.121.48.0/24') }}"
+        "{{ local_network | default('192.168.1.0/24') }}"
+        "127.0.0.0/8"
+    )
+    
+    netstat -tn | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u | while read IP; do
+        AUTHORIZED=false
+        for NETWORK in "${AUTHORIZED_NETWORKS[@]}"; do
+            if ipcalc -c "$IP" "$NETWORK" 2>/dev/null; then
+                AUTHORIZED=true
+                break
+            fi
+        done
+        
+        if [ "$AUTHORIZED" = false ] && [ "$IP" != "" ]; then
+            log_message "ALERT: Conexión desde IP no autorizada: $IP"
+            echo "UNAUTHORIZED_IP: $IP" >> $ALERT_FILE
+        fi
+    done
+}
+
+# Verificar integridad de archivos críticos
+check_critical_files() {
+    CRITICAL_FILES=(
+        "/etc/passwd"
+        "/etc/shadow"
+        "/etc/sudoers"
+        "/etc/ssh/sshd_config"
+        "/etc/iptables/rules.v4"
+    )
+    
+    for FILE in "${CRITICAL_FILES[@]}"; do
+        if [ -f "$FILE" ]; then
+            CURRENT_HASH=$(md5sum "$FILE" | cut -d' ' -f1)
+            STORED_HASH_FILE="/var/lib/security_hashes/$(basename $FILE).hash"
+            
+            if [ -f "$STORED_HASH_FILE" ]; then
+                STORED_HASH=$(cat "$STORED_HASH_FILE")
+                if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
+                    log_message "ALERT: Archivo crítico modificado: $FILE"
+                    echo "FILE_CHANGE: $FILE" >> $ALERT_FILE
+                fi
+            else
+                mkdir -p /var/lib/security_hashes
+                echo "$CURRENT_HASH" > "$STORED_HASH_FILE"
+            fi
+        fi
+    done
+}
+
+# Ejecutar todas las verificaciones
+check_ssh_connections
+check_failed_logins
+check_unauthorized_ips
+check_critical_files
+
+# Enviar alertas si existen
+if [ -f "$ALERT_FILE" ] && [ -s "$ALERT_FILE" ]; then
+    {
+        echo "ALERTAS DE SEGURIDAD - {{ inventory_hostname }}"
+        echo "Fecha: $(date)"
+        echo "================================"
+        cat "$ALERT_FILE"
+        echo "================================"
+        echo "Ver log completo en: $LOG_FILE"
+    } | mail -s "Alertas de Seguridad - {{ inventory_hostname }}" {{ admin_email | default('root') }}
+    
+    rm -f "$ALERT_FILE"
+fi
+
+log_message "Monitoreo de seguridad completado"

@@ -3,19 +3,19 @@
 # Objetivo: crear un usuario para el laboratorio gamer y aplicar permisos básicos.
 
 - name: "Crear usuario 'gameruser' si no existe"
-  win_user:
+  ansible.windows.win_user:
     name: gameruser
     password: 'P@ssw0rd123!'
     state: present
     groups: 'Usuarios'
 
 - name: "Crear carpeta compartida C:\\lab_shared"
-  win_file:
+  ansible.windows.win_file:
     path: C:\lab_shared
     state: directory
 
 - name: "Ajustar permisos: dar control total a Administradores sobre C:\\lab_shared"
-  win_acl:
+  ansible.windows.win_acl:
     path: C:\lab_shared
     user: 'Administradores'
     rights: FullControl

@@ -1,13 +1,49 @@
 ---
 # Playbook principal: Administración total de laboratorios
+# SO-Ansible (Hybrid) - Soporte para Linux, Windows y macOS
 
-- name: Administración completa en Laboratorio Académico (Ubuntu)
+- name: Configuración de seguridad integral
+  hosts: all
+  become: yes
+  roles:
+    - security
+
+- name: Administración completa en Laboratorio Académico (Linux Ubuntu/Mint)
   hosts: academico
   become: yes
   roles:
     - linux
 
-- name: Administración completa en Laboratorio Gamer (Windows)
+- name: Administración completa en Laboratorio Gamer (Windows 11 Pro)
   hosts: gamer
   roles:
     - windows
+
+- name: Administración completa en VM macOS (Testing)
+  hosts: macos_test
+  become: yes
+  roles:
+    - macos
+
+- name: Resumen de administración
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg:
+          - "=== ADMINISTRACIÓN COMPLETADA ==="
+          - ""
+          - "🔒 Seguridad configurada en todos los hosts"
+          - "Hosts configurados:"
+          - "  Académico (Linux): {{ groups['academico'] | length }} host(s)"
+          - "  Gamer (Windows): {{ groups['gamer'] | length }} host(s)"
+          - "  macOS Test: {{ groups['macos_test'] | default([]) | length }} host(s)"
+          - ""
+          - "🛡️  Políticas de seguridad aplicadas:"
+          - "  - Firewall configurado (iptables/Windows Firewall)"
+          - "  - SSH/RDP hardening aplicado"
+          - "  - Monitoreo de seguridad activo"
+          - "  - Integración con políticas ESXi"
+          - ""
+          - "Siguiente paso: ansible-playbook tests/validate_configuration.yml"

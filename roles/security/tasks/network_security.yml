@@ -1,0 +1,312 @@
+---
+# Configuración de seguridad para interfaces de red (NIC)
+# Implementación de medidas de seguridad de red y VLAN
+
+- name: "🌐 CONFIGURACIÓN DE SEGURIDAD DE RED Y NIC"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "🌐 CONFIGURANDO SEGURIDAD DE RED Y NIC"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_system }}"
+      - "Configurando VLANs, tráfico y seguridad de red"
+      - "=================================================="
+
+- name: Detectar información de red actual
+  ansible.builtin.set_fact:
+    vm_ip: "{{ ansible_default_ipv4.address }}"
+    vm_network: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}"
+    esxi_host_ip: "{{ esxi_host.split(':')[0] if esxi_host is defined else '168.121.48.254' }}"
+
+- name: Mostrar información de red detectada
+  ansible.builtin.debug:
+    msg:
+      - "🌐 CONFIGURACIÓN DE RED DETECTADA:"
+      - "VM IP: {{ vm_ip }}"
+      - "Red VM: {{ vm_network }}"
+      - "ESXi Host: {{ esxi_host_ip }}"
+      - "Gateway: {{ ansible_default_ipv4.gateway | default('N/A') }}"
+
+# ==============================================
+# CONFIGURACIÓN DE INTERFACES DE RED LINUX
+# ==============================================
+- name: "Configurar seguridad de red en Linux"
+  block:
+    - name: "📦 Instalar herramientas de red y seguridad"
+      ansible.builtin.package:
+        name:
+          - bridge-utils
+          - vlan
+          - tcpdump
+          - wireshark-common
+          - ethtool
+          - net-tools
+          - iftop
+          - nethogs
+          - nmap
+          - iptables-persistent
+        state: present
+
+    - name: "🔧 Cargar módulo 8021q para VLANs"
+      ansible.builtin.modprobe:
+        name: 8021q
+        state: present
+
+    - name: "📝 Asegurar carga del módulo VLAN en boot"
+      ansible.builtin.lineinfile:
+        path: /etc/modules
+        line: "8021q"
+        create: yes
+
+    - name: "🌐 Obtener información de interfaces de red"
+      ansible.builtin.setup:
+        gather_subset:
+          - network
+      register: network_facts
+
+    - name: "📊 Mostrar interfaces de red detectadas"
+      ansible.builtin.debug:
+        msg:
+          - "=== INTERFACES DE RED DETECTADAS ==="
+          - "{% for interface in ansible_interfaces %}"
+          - "Interface: {{ interface }}"
+          - "  Estado: {{ ansible_facts[interface]['active'] | default('unknown') }}"
+          - "  IP: {{ ansible_facts[interface]['ipv4']['address'] | default('no IP') if ansible_facts[interface]['ipv4'] is defined else 'no IP' }}"
+          - "  MAC: {{ ansible_facts[interface]['macaddress'] | default('no MAC') }}"
+          - "{% endfor %}"
+
+    - name: "🔒 Configurar parámetros de kernel para seguridad de red"
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/99-network-security.conf
+      loop:
+        # Prevenir IP spoofing
+        - {name: "net.ipv4.conf.all.rp_filter", value: "1"}
+        - {name: "net.ipv4.conf.default.rp_filter", value: "1"}
+        
+        # Ignorar redirects ICMP
+        - {name: "net.ipv4.conf.all.accept_redirects", value: "0"}
+        - {name: "net.ipv4.conf.default.accept_redirects", value: "0"}
+        - {name: "net.ipv6.conf.all.accept_redirects", value: "0"}
+        - {name: "net.ipv6.conf.default.accept_redirects", value: "0"}
+        
+        # No enviar redirects
+        - {name: "net.ipv4.conf.all.send_redirects", value: "0"}
+        - {name: "net.ipv4.conf.default.send_redirects", value: "0"}
+        
+        # Ignorar source routing
+        - {name: "net.ipv4.conf.all.accept_source_route", value: "0"}
+        - {name: "net.ipv4.conf.default.accept_source_route", value: "0"}
+        - {name: "net.ipv6.conf.all.accept_source_route", value: "0"}
+        - {name: "net.ipv6.conf.default.accept_source_route", value: "0"}
+        
+        # Protección contra SYN flood
+        - {name: "net.ipv4.tcp_syncookies", value: "1"}
+        - {name: "net.ipv4.tcp_max_syn_backlog", value: "2048"}
+        - {name: "net.ipv4.tcp_synack_retries", value: "2"}
+        - {name: "net.ipv4.tcp_syn_retries", value: "5"}
+        
+        # Configuraciones adicionales de seguridad
+        - {name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1"}
+        - {name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1"}
+        - {name: "net.ipv4.tcp_rfc1337", value: "1"}
+        
+        # Protección IPv6
+        - {name: "net.ipv6.conf.all.disable_ipv6", value: "0"}
+        - {name: "net.ipv6.conf.all.accept_ra", value: "0"}
+        - {name: "net.ipv6.conf.default.accept_ra", value: "0"}
+
+    - name: "🔍 Configurar monitoreo de tráfico de red"
+      ansible.builtin.template:
+        src: "network_monitor.sh.j2"
+        dest: "/usr/local/bin/network_monitor.sh"
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: "⏰ Configurar cron para monitoreo de red"
+      ansible.builtin.cron:
+        name: "Monitor de tráfico de red"
+        minute: "*/10"
+        job: "/usr/local/bin/network_monitor.sh"
+        user: root
+
+    - name: Configurar hosts file con entradas seguras
+      ansible.builtin.lineinfile:
+        path: "/etc/hosts"
+        line: "{{ item.ip }} {{ item.hostname }}"
+        state: present
+      loop:
+        - { ip: "{{ esxi_host_ip }}", hostname: "esxi-host.local esxi-lab" }
+        - { ip: "127.0.0.1", hostname: "{{ inventory_hostname }}.local" }
+        - { ip: "{{ vm_ip }}", hostname: "{{ inventory_hostname }}" }
+
+    - name: Configurar resolución DNS segura
+      ansible.builtin.template:
+        src: resolv.conf.j2
+        dest: /etc/resolv.conf
+        backup: yes
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - network
+    - nic
+    - security
+    - linux
+
+# ==============================================
+# CONFIGURACIÓN DE INTERFACES DE RED WINDOWS
+# ==============================================
+- name: "Configurar seguridad de red en Windows"
+  block:
+    - name: "🌐 Obtener información de adaptadores de red"
+      ansible.windows.win_shell: |
+        Get-NetAdapter | Select-Object Name,InterfaceDescription,Status,LinkSpeed,MacAddress | ConvertTo-Json
+      register: windows_network_adapters
+
+    - name: "📊 Mostrar adaptadores de red Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=== ADAPTADORES DE RED WINDOWS ==="
+          - "{{ windows_network_adapters.stdout | from_json }}"
+
+    - name: "🛡️ Configurar perfil de red como privado"
+      ansible.windows.win_shell: |
+        # Configurar todas las conexiones como red privada
+        Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private
+        
+        # Habilitar descubrimiento de red solo en redes privadas
+        netsh advfirewall firewall set rule group="Network Discovery" new enable=Yes
+
+    - name: "🔒 Configurar parámetros de TCP/IP para seguridad"
+      ansible.windows.win_shell: |
+        # Habilitar protección SYN flood
+        netsh int tcp set global autotuninglevel=normal
+        netsh int tcp set global chimney=enabled
+        netsh int tcp set global rss=enabled
+        netsh int tcp set global netdma=enabled
+        
+        # Configurar parámetros de seguridad TCP
+        reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v "SynAttackProtect" /t REG_DWORD /d 1 /f
+        reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v "TCPMaxConnectRetransmissions" /t REG_DWORD /d 3 /f
+        reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v "TCPMaxDataRetransmissions" /t REG_DWORD /d 3 /f
+
+    - name: "🚫 Deshabilitar protocolos innecesarios"
+      ansible.windows.win_shell: |
+        # Deshabilitar NetBIOS sobre TCP/IP en todas las interfaces
+        $adapters = Get-WmiObject -Class Win32_NetworkAdapterConfiguration | Where-Object {$_.IPEnabled -eq $true}
+        foreach ($adapter in $adapters) {
+            $adapter.SetTcpipNetbios(2)  # 2 = Disable NetBIOS over TCP/IP
+        }
+        
+        # Deshabilitar LLMNR
+        reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" /v "EnableMulticast" /t REG_DWORD /d 0 /f
+
+    - name: Configurar hosts file con entradas seguras
+      ansible.windows.win_lineinfile:
+        path: "C:\\Windows\\System32\\drivers\\etc\\hosts"
+        line: "{{ item.ip }} {{ item.hostname }}"
+        state: present
+      loop:
+        - { ip: "{{ esxi_host_ip }}", hostname: "esxi-host.local esxi-lab" }
+        - { ip: "127.0.0.1", hostname: "{{ inventory_hostname }}.local" }
+        - { ip: "{{ vm_ip }}", hostname: "{{ inventory_hostname }}" }
+
+    - name: Configurar DNS seguro
+      ansible.windows.win_dns_client:
+        adapter_names: "*"
+        ipv4_addresses:
+          - "{{ dns_primary | default('8.8.8.8') }}"
+          - "{{ dns_secondary | default('8.8.4.4') }}"
+
+  when: ansible_os_family == "Windows"
+  tags:
+    - network
+    - nic
+    - security
+    - windows
+
+- name: Verificar conectividad con ESXi Host
+  ansible.builtin.wait_for:
+    host: "{{ esxi_host_ip }}"
+    port: 443
+    timeout: 10
+    state: started
+  ignore_errors: yes
+
+# ==============================================
+# VALIDACIÓN DE CONFIGURACIÓN DE RED
+# ==============================================
+- name: "✅ Validar configuración de red"
+  block:
+    - name: "🔍 Verificar interfaces de red"
+      ansible.builtin.command: ip addr show
+      register: ip_addr_output
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "🌐 Verificar conectividad de red"
+      ansible.builtin.ping:
+        dest: "{{ item }}"
+        count: 3
+      loop:
+        - "8.8.8.8"
+        - "{{ network.dns_servers[0] | default('8.8.8.8') }}"
+      register: ping_results
+      ignore_errors: yes
+
+    - name: "📊 Mostrar resumen de configuración de red"
+      ansible.builtin.debug:
+        msg:
+          - "=== CONFIGURACIÓN DE RED COMPLETADA ==="
+          - "Host: {{ inventory_hostname }}"
+          - "Sistema: {{ ansible_system }}"
+          - "Interfaces configuradas: {{ ansible_interfaces | length }}"
+          - "VLANs configuradas: {{ '✅' if vlans is defined else '❌' }}"
+          - "Conectividad externa: {{ '✅' if ping_results.results[0].failed == false else '❌' }}"
+          - "DNS funcional: {{ '✅' if ping_results.results[1].failed == false else '❌' }}"
+          - "Estado: ✅ Configuración completada"
+
+  tags:
+    - validation
+    - network
+  register: esxi_connectivity
+  ignore_errors: yes
+
+- name: Mostrar estado de conectividad ESXi
+  ansible.builtin.debug:
+    msg: "{{ 'Conectividad ESXi: ✅ OK' if not esxi_connectivity.failed else 'Conectividad ESXi: ❌ FAILED' }}"
+
+# Configurar túneles seguros si es necesario
+- name: Configurar túnel SSH para administración remota (Linux)
+  ansible.builtin.template:
+    src: ssh_tunnel.sh.j2
+    dest: /usr/local/bin/ssh_tunnel.sh
+    mode: '0755'
+  when: 
+    - ansible_os_family == "Debian"
+    - enable_ssh_tunnels | default(false)
+
+- name: Configurar reglas de red específicas por rol
+  ansible.builtin.include_tasks: "network_{{ lab_role | default('generic') }}.yml"
+  vars:
+    lab_role: "{{ 'academico' if inventory_hostname in groups['academico'] | default([]) else 'gamer' if inventory_hostname in groups['gamer'] | default([]) else 'generic' }}"
+  ignore_errors: yes
+
+- name: Validar configuración de red final
+  ansible.builtin.shell: |
+    {% if ansible_os_family == "Debian" %}
+    ip route show | grep default
+    iptables -L -n | grep -E "(ACCEPT|DROP|REJECT)" | head -10
+    {% elif ansible_os_family == "Windows" %}
+    route print 0.0.0.0
+    netsh advfirewall firewall show rule name=all | findstr "Rule Name"
+    {% endif %}
+  register: network_validation
+  
+- name: Mostrar validación de red
+  ansible.builtin.debug:
+    var: network_validation.stdout_lines

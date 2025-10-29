@@ -1,0 +1,31 @@
+---
+# Collections requeridas para SO-Ansible (Hybrid)
+# Instalar con: ansible-galaxy collection install -r requirements.yml
+
+collections:
+  # VMware vSphere/ESXi management
+  - name: community.vmware
+    version: ">=4.0.0"
+    
+  # Windows management y tareas programadas
+  - name: community.windows
+    version: ">=2.0.0"
+    
+  # VirtualBox management y utilidades generales
+  - name: community.general
+    version: ">=8.0.0"
+    
+  # Generación de claves SSH y certificados
+  - name: community.crypto
+    version: ">=2.0.0"
+    
+  # Core Ansible Windows modules
+  - name: ansible.windows
+    version: ">=2.0.0"
+    
+  # POSIX utilities (para Linux/macOS)
+  - name: ansible.posix
+    version: ">=1.0.0"
+
+# Python packages adicionales (opcional, instalar con pip)
+# pip install pyvmomi pywinrm

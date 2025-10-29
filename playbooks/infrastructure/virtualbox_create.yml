@@ -1,0 +1,75 @@
+---
+# Playbook para crear VMs en VirtualBox local
+# Usar para levantar infraestructura en VirtualBox local
+
+- name: Crear VMs en VirtualBox local
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    # Configuración VirtualBox
+    vbox_hostonly_adapter: "vboxnet0"
+    vbox_hostonly_ip: "192.168.56.1"
+    vbox_hostonly_netmask: "255.255.255.0"
+    vbox_vms_path: "~/VirtualBox VMs"
+    
+    # Configuración de VMs
+    vbox_academico_name: "Ubuntu-Academico"
+    vbox_academico_memory: 4096
+    vbox_academico_cpus: 2
+    vbox_academico_disk: 40960  # MB
+    
+    vbox_gamer_name: "Windows-Gamer"
+    vbox_gamer_memory: 8192
+    vbox_gamer_cpus: 4
+    vbox_gamer_disk: 81920  # MB
+    
+    vbox_macos_name: "macOS-Mojave-Test"
+    vbox_macos_memory: 6144
+    vbox_macos_cpus: 2
+    vbox_macos_disk: 61440  # MB
+    
+    # Rutas de ISOs locales (opcional)
+    # ubuntu_iso_local_path: "/path/to/ubuntu-24.04.3-live-server-amd64.iso"
+    # windows_iso_local_path: "/path/to/windows-11-pro.iso"
+    # macos_iso_local_path: "/path/to/macOS-Mojave.iso"
+    
+    # Opciones de creación
+    create_vbox_academico: true
+    create_vbox_gamer: true
+    create_vbox_macos: false
+    setup_hostonly_network: true
+    
+  pre_tasks:
+    - name: Verificar que VirtualBox esté instalado
+      ansible.builtin.command: which vboxmanage
+      register: vbox_check
+      failed_when: vbox_check.rc != 0
+      changed_when: false
+      
+    - name: Mostrar información del sistema host
+      ansible.builtin.debug:
+        msg:
+          - "Sistema host: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Usuario: {{ ansible_user_id }}"
+          - "Directorio home: {{ ansible_env.HOME }}"
+          
+  roles:
+    - infrastructure
+    
+  post_tasks:
+    - name: Instrucciones finales VirtualBox
+      ansible.builtin.debug:
+        msg:
+          - "=== VMs creadas en VirtualBox ==="
+          - ""
+          - "Siguiente paso:"
+          - "1. Inicie las VMs desde VirtualBox Manager"
+          - "2. Complete la instalación de OS manualmente"
+          - "3. Configure red (NAT + Host-Only) con IPv6"
+          - "4. Actualice inventory/hosts.ini con las IPs de host-only"
+          - "5. Ejecute: ansible-playbook playbooks/main.yml"
+          - ""
+          - "Red Host-Only configurada:"
+          - "  Adaptador: {{ vbox_hostonly_adapter }}"
+          - "  IP Gateway: {{ vbox_hostonly_ip }}/24"
+          - "  Rango DHCP sugerido: {{ vbox_hostonly_ip | regex_replace('1$', '10-50') }}"

@@ -1,0 +1,62 @@
+---
+# Configuración de red en macOS
+
+- name: Obtener información de interfaces de red
+  ansible.builtin.command: networksetup -listallhardwareports
+  register: network_interfaces
+  changed_when: false
+
+- name: Mostrar interfaces de red disponibles
+  ansible.builtin.debug:
+    msg: "{{ network_interfaces.stdout_lines }}"
+
+- name: Obtener configuración actual de red
+  ansible.builtin.command: networksetup -getinfo "{{ network_service }}"
+  register: current_network_config
+  changed_when: false
+  failed_when: false
+
+- name: Mostrar configuración actual
+  ansible.builtin.debug:
+    msg: "Configuración actual de {{ network_service }}: {{ current_network_config.stdout_lines }}"
+
+- name: Configurar IPv6 estático
+  ansible.builtin.command: >
+    networksetup -setv6manual "{{ network_service }}" 
+    {{ ipv6_address.split('/')[0] }} 
+    {{ ipv6_address.split('/')[1] }} 
+    {{ ipv6_gateway }}
+  become: yes
+  when: 
+    - ipv6_enabled
+    - ipv6_config_method == "static"
+  register: ipv6_config_result
+
+- name: Configurar IPv4 como fallback
+  ansible.builtin.command: >
+    networksetup -setmanual "{{ network_service }}" 
+    {{ ipv4_address.split('/')[0] }} 
+    255.255.255.0 
+    {{ ipv4_gateway }}
+  become: yes
+  when: 
+    - ipv4_enabled
+    - ipv6_config_method == "static"
+  register: ipv4_config_result
+
+- name: Configurar servidores DNS
+  ansible.builtin.command: >
+    networksetup -setdnsservers "{{ network_service }}" 
+    {{ dns_servers | join(' ') }}
+  become: yes
+
+- name: Obtener configuración final de red
+  ansible.builtin.command: networksetup -getinfo "{{ network_service }}"
+  register: final_network_config
+  changed_when: false
+
+- name: Mostrar configuración final
+  ansible.builtin.debug:
+    msg: 
+      - "=== Configuración final de red ==="
+      - "{{ final_network_config.stdout_lines }}"

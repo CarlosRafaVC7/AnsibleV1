@@ -1,0 +1,180 @@
+---
+# Configuración de seguridad para sistemas Windows
+# Incluye Windows Firewall, políticas de seguridad, hardening
+
+- name: Habilitar Windows Firewall en todos los perfiles
+  ansible.windows.win_firewall:
+    state: enabled
+    profiles:
+      - domain
+      - private
+      - public
+
+- name: Configurar reglas de firewall esenciales - Permitir WinRM
+  community.windows.win_firewall_rule:
+    name: "WinRM-HTTP-Ansible"
+    localport: 5985
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles:
+      - private
+      - domain
+    remoteip: 
+      - "{{ esxi_network | default('168.121.48.0/24') }}"
+      - "{{ local_network | default('192.168.1.0/24') }}"
+    description: "Permitir WinRM solo desde redes autorizadas"
+
+- name: Configurar reglas de firewall - RDP seguro
+  community.windows.win_firewall_rule:
+    name: "RDP-Seguro-Ansible"
+    localport: 3389
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles:
+      - private
+      - domain
+    remoteip: 
+      - "{{ esxi_network | default('168.121.48.0/24') }}"
+      - "{{ local_network | default('192.168.1.0/24') }}"
+    description: "RDP solo desde redes autorizadas"
+
+- name: Configurar reglas de firewall - HTTP/HTTPS para IIS
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles:
+      - private
+      - domain
+    description: "{{ item.desc }}"
+  loop:
+    - { name: "HTTP-IIS-Ansible", port: "80", desc: "HTTP para IIS" }
+    - { name: "HTTPS-IIS-Ansible", port: "443", desc: "HTTPS para IIS" }
+
+- name: Bloquear puertos peligrosos específicamente
+  community.windows.win_firewall_rule:
+    name: "Block-{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: block
+    direction: in
+    protocol: tcp
+    profiles:
+      - public
+    description: "Bloquear {{ item.desc }}"
+  loop:
+    - { name: "Telnet", port: "23", desc: "Telnet inseguro" }
+    - { name: "FTP", port: "21", desc: "FTP inseguro" }
+    - { name: "SNMP", port: "161", desc: "SNMP público" }
+    - { name: "NetBIOS", port: "139", desc: "NetBIOS" }
+
+- name: Configurar políticas de seguridad local
+  ansible.windows.win_security_policy:
+    section: "{{ item.section }}"
+    key: "{{ item.key }}"
+    value: "{{ item.value }}"
+  loop:
+    # Políticas de contraseñas
+    - { section: "System Access", key: "MinimumPasswordAge", value: "1" }
+    - { section: "System Access", key: "MaximumPasswordAge", value: "90" }
+    - { section: "System Access", key: "MinimumPasswordLength", value: "12" }
+    - { section: "System Access", key: "PasswordComplexity", value: "1" }
+    - { section: "System Access", key: "PasswordHistorySize", value: "5" }
+    
+    # Políticas de bloqueo de cuenta
+    - { section: "System Access", key: "LockoutBadCount", value: "5" }
+    - { section: "System Access", key: "LockoutDuration", value: "30" }
+    - { section: "System Access", key: "ResetLockoutCount", value: "30" }
+    
+    # Políticas de auditoría
+    - { section: "Event Audit", key: "AuditSystemEvents", value: "3" }
+    - { section: "Event Audit", key: "AuditLogonEvents", value: "3" }
+    - { section: "Event Audit", key: "AuditObjectAccess", value: "1" }
+    - { section: "Event Audit", key: "AuditPolicyChange", value: "3" }
+    - { section: "Event Audit", key: "AuditAccountManage", value: "3" }
+
+- name: Deshabilitar servicios innecesarios de Windows
+  ansible.windows.win_service:
+    name: "{{ item }}"
+    state: stopped
+    start_mode: disabled
+  loop:
+    - "Fax"
+    - "TapiSrv"
+    - "Telnet"
+    - "RemoteRegistry"
+    - "Browser"
+  ignore_errors: yes
+
+- name: Configurar Windows Defender
+  ansible.windows.win_shell: |
+    Set-MpPreference -DisableRealtimeMonitoring $false
+    Set-MpPreference -SubmitSamplesConsent 1
+    Set-MpPreference -MAPSReporting 2
+    Set-MpPreference -HighThreatDefaultAction Remove
+    Set-MpPreference -ModerateThreatDefaultAction Remove
+    Set-MpPreference -LowThreatDefaultAction Remove
+    Set-MpPreference -SevereThreatDefaultAction Remove
+    Update-MpSignature
+
+- name: Configurar UAC (Control de Cuentas de Usuario)
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+    name: "{{ item.name }}"
+    data: "{{ item.value }}"
+    type: dword
+  loop:
+    - { name: "EnableLUA", value: 1 }
+    - { name: "ConsentPromptBehaviorAdmin", value: 2 }
+    - { name: "ConsentPromptBehaviorUser", value: 3 }
+    - { name: "PromptOnSecureDesktop", value: 1 }
+
+- name: Deshabilitar AutoRun/AutoPlay
+  ansible.windows.win_regedit:
+    path: "{{ item.path }}"
+    name: "{{ item.name }}"
+    data: "{{ item.value }}"
+    type: dword
+  loop:
+    - { path: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", name: "NoDriveTypeAutoRun", value: 255 }
+    - { path: "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", name: "NoDriveTypeAutoRun", value: 255 }
+
+- name: Configurar logging avanzado
+  ansible.windows.win_shell: |
+    wevtutil sl Security /ms:1000000
+    wevtutil sl Application /ms:1000000
+    wevtutil sl System /ms:1000000
+    auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+    auditpol /set /subcategory:"Account Lockout" /success:enable /failure:enable
+    auditpol /set /subcategory:"User Account Management" /success:enable /failure:enable
+
+- name: Crear tarea programada para monitoreo de seguridad
+  community.windows.win_scheduled_task:
+    name: "Security-Monitor-Ansible"
+    description: "Monitoreo de eventos de seguridad cada 15 minutos"
+    actions:
+      - path: 'powershell.exe'
+        arguments: '-Command "Get-WinEvent -FilterHashtable @{LogName=''Security''; ID=4625,4740,4767} -MaxEvents 50 | Export-Csv -Path C:\\ansible_monitor\\security_events.csv -Append"'
+    triggers:
+      - type: daily
+        start_boundary: "2025-01-01T00:00:00"
+        repetition:
+          interval: PT15M
+          duration: PT24H
+    username: 'SYSTEM'
+    state: present
+
+- name: Configurar restricciones de red adicionales
+  ansible.windows.win_shell: |
+    # Deshabilitar NetBIOS sobre TCP/IP
+    $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where {$_.IPEnabled -eq $true}
+    foreach ($adapter in $adapters) {
+        $adapter.SetTcpipNetbios(2)  # 2 = Disable NetBIOS over TCP/IP
+    }
+    
+    # Configurar SMB seguro
+    Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+    Set-SmbServerConfiguration -RequireSecuritySignature $true -Force

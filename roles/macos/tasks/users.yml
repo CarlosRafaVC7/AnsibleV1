@@ -1,0 +1,38 @@
+---
+# Gestión de usuarios en macOS
+
+- name: Crear usuario de laboratorio
+  ansible.builtin.user:
+    name: "{{ lab_user }}"
+    comment: "Usuario de laboratorio para testing"
+    shell: /bin/zsh
+    state: present
+    create_home: yes
+    groups: admin
+  become: yes
+
+- name: Crear carpeta compartida
+  ansible.builtin.file:
+    path: "{{ shared_folder }}"
+    state: directory
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0755'
+  become: yes
+
+- name: Configurar sudoers para usuario de laboratorio
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    line: "{{ lab_user }} ALL=(ALL) NOPASSWD:ALL"
+    validate: 'visudo -cf %s'
+    backup: yes
+  become: yes
+
+- name: Mostrar usuarios del sistema
+  ansible.builtin.command: dscl . list /Users
+  register: macos_users
+  changed_when: false
+
+- name: Mostrar usuarios (debug)
+  ansible.builtin.debug:
+    msg: "Usuarios en el sistema: {{ macos_users.stdout_lines[-10:] }}"

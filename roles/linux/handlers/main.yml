@@ -1,0 +1,30 @@
+---
+# Handlers para el rol Linux
+
+- name: restart_ssh
+  ansible.builtin.systemd:
+    name: ssh
+    state: restarted
+  become: yes
+
+- name: reload_ssh_config
+  ansible.builtin.systemd:
+    name: ssh
+    state: reloaded
+  become: yes
+
+- name: restart_networking
+  ansible.builtin.systemd:
+    name: systemd-networkd
+    state: restarted
+  become: yes
+
+- name: apply_netplan
+  ansible.builtin.command: netplan apply
+  become: yes
+
+- name: restart_cron
+  ansible.builtin.systemd:
+    name: cron
+    state: restarted
+  become: yes

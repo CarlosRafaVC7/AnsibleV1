@@ -1,0 +1,114 @@
+---
+# Tareas específicas para VMware ESXi
+
+- name: Verificar credenciales ESXi
+  ansible.builtin.assert:
+    that:
+      - esxi_host is defined
+      - esxi_user is defined 
+      - esxi_pass is defined
+    fail_msg: "Se requieren variables ESXi"
+
+- name: Mostrar estado de ESXi
+  ansible.builtin.debug:
+    msg:
+      - "ESXi Host: {{ esxi_host }}"
+      - "Usuario: {{ esxi_user }}"
+      - "Datastore: {{ datastore_name | default('datastore1') }}"
+
+# === CREACIÓN DE VMs ===
+
+- name: Verificar si VM Ubuntu ya existe
+  community.vmware.vmware_guest_info:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    datacenter: "{{ datacenter_name | default('ha-datacenter') }}"
+    name: "{{ vm_ubuntu_name | default('Ubuntu-Academico') }}"
+  register: vm_ubuntu_exists
+  delegate_to: localhost
+  failed_when: false
+  changed_when: false
+
+- name: Crear VM Ubuntu (Académico)
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    datacenter: "{{ datacenter_name | default('ha-datacenter') }}"
+    folder: "/"
+    name: "{{ vm_ubuntu_name | default('Ubuntu-Academico') }}"
+    state: present
+    guest_id: ubuntu64Guest
+    esxi_hostname: "{{ esxi_hostname_fqdn | default('localhost.localdomain') }}"
+    disk:
+      - size_gb: "{{ vm_ubuntu_disk | default(40) }}"
+        type: thin
+        datastore: "{{ datastore_name | default('datastore1') }}"
+    hardware:
+      memory_mb: "{{ vm_ubuntu_memory | default(4096) }}"
+      num_cpus: "{{ vm_ubuntu_cpus | default(2) }}"
+      scsi: paravirtual
+    networks:
+      - name: "{{ vm_network | default('VM Network') }}"
+        device_type: vmxnet3
+        start_connected: true
+    wait_for_ip_address: false
+    state_change_timeout: 180
+  delegate_to: localhost
+  when: 
+    - create_vm_academico | default(true)
+    - vm_ubuntu_exists.instance is not defined
+
+- name: Verificar si VM Windows ya existe
+  community.vmware.vmware_guest_info:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    datacenter: "{{ datacenter_name | default('ha-datacenter') }}"
+    name: "{{ vm_windows_name | default('Windows-Gamer') }}"
+  register: vm_windows_exists
+  delegate_to: localhost
+  failed_when: false
+  changed_when: false
+
+- name: Crear VM Windows (Gamer)
+  community.vmware.vmware_guest:
+    hostname: "{{ esxi_host }}"
+    username: "{{ esxi_user }}"
+    password: "{{ esxi_pass }}"
+    validate_certs: false
+    datacenter: "{{ datacenter_name | default('ha-datacenter') }}"
+    folder: "/"
+    name: "{{ vm_windows_name | default('Windows-Gamer') }}"
+    state: present
+    guest_id: windows9_64Guest
+    esxi_hostname: "{{ esxi_hostname_fqdn | default('localhost.localdomain') }}"
+    disk:
+      - size_gb: "{{ vm_windows_disk | default(80) }}"
+        type: thin
+        datastore: "{{ datastore_name | default('datastore1') }}"
+    hardware:
+      memory_mb: "{{ vm_windows_memory | default(8192) }}"
+      num_cpus: "{{ vm_windows_cpus | default(4) }}"
+      scsi: paravirtual
+    networks:
+      - name: "{{ vm_network | default('VM Network') }}"
+        device_type: vmxnet3
+        start_connected: true
+    wait_for_ip_address: false
+    state_change_timeout: 180
+  delegate_to: localhost
+  when: 
+    - create_vm_gamer | default(true)
+    - vm_windows_exists.instance is not defined
+
+- name: Mostrar VMs creadas
+  ansible.builtin.debug:
+    msg:
+      - "✅ VMs configuradas para creación"
+      - "Ubuntu-Academico: {{ 'Existe' if vm_ubuntu_exists.instance is defined else 'Se creará' }}"
+      - "Windows-Gamer: {{ 'Existe' if vm_windows_exists.instance is defined else 'Se creará' }}"

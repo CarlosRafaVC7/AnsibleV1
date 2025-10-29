@@ -1,0 +1,164 @@
+---
+# Variables para grupo academico (Linux Ubuntu/Mint)
+
+# ==============================================
+# USUARIOS ESPECÍFICOS DEL LAB ACADÉMICO
+# ==============================================
+academic_users:
+  # Profesor/Administrador del laboratorio
+  - username: "{{ vault_admin_username }}"
+    fullname: "Administrador del Laboratorio"
+    groups:
+      - wheel
+      - sudo
+      - docker
+      - systemd-journal
+    shell: "/bin/bash"
+    password: "{{ vault_admin_password }}"
+    sudo_nopasswd: false
+    home_mode: "0700"
+    
+  # Estudiante principal
+  - username: "{{ vault_student_username }}"
+    fullname: "Estudiante de Laboratorio"
+    groups:
+      - students
+      - docker
+      - audio
+      - video
+    shell: "/bin/bash"
+    password: "{{ vault_student_password }}"
+    sudo_nopasswd: false
+    home_mode: "0755"
+    
+  # Usuario para prácticas
+  - username: "practice_user"
+    fullname: "Usuario de Prácticas"
+    groups:
+      - students
+      - practice
+    shell: "/bin/bash"
+    password: "{{ vault_student_password }}"
+    sudo_nopasswd: true
+    sudo_commands:
+      - "/usr/bin/systemctl status *"
+      - "/usr/bin/systemctl start apache2"
+      - "/usr/bin/systemctl stop apache2"
+      - "/usr/bin/systemctl restart apache2"
+    home_mode: "0755"
+
+# ==============================================
+# GRUPOS ESPECÍFICOS DEL LAB ACADÉMICO
+# ==============================================
+academic_groups:
+  - name: "students"
+    gid: 2000
+    description: "Grupo de estudiantes del laboratorio"
+    
+  - name: "practice"
+    gid: 2001
+    description: "Grupo para usuarios de prácticas"
+    
+  - name: "academic_admin"
+    gid: 2002
+    description: "Administradores académicos"
+    
+  - name: "lab_developers"
+    gid: 2003
+    description: "Desarrolladores del laboratorio"
+
+# Configuración de usuario (compatibilidad)
+default_user: "mint"
+lab_user: "{{ vault_student_username }}"
+shared_folder: "/home/lab_shared"
+
+# ==============================================
+# CONFIGURACIÓN DE RED ACADÉMICA
+# ==============================================
+# Configuración IPv6
+ipv6_enabled: true
+ipv6_config_method: "static"  # static, dhcp, auto
+ipv6_address: "{{ ipv6_prefix }}::100/64"  # Actualizar con IP real
+ipv6_gateway: "{{ ipv6_prefix }}::1"
+
+# Fallback IPv4
+ipv4_enabled: true
+ipv4_address: "192.168.18.28/24"
+ipv4_gateway: "192.168.18.1"
+
+# Red académica específica
+academic_network:
+  vlan_id: 100
+  subnet: "192.168.100.0/24"
+  gateway: "192.168.100.1"
+  dns_servers:
+    - "192.168.100.10"
+    - "8.8.8.8"
+  domain: "academico.lab.local"
+
+# ==============================================
+# SERVICIOS Y PAQUETES
+# ==============================================
+# Servicios requeridos
+required_services:
+  - ssh
+  - cron
+  - systemd-resolved
+  - apache2
+  - mysql
+
+# Paquetes a instalar
+required_packages:
+  - openssh-server
+  - python3
+  - python3-pip
+  - htop
+  - vim
+  - curl
+  - wget
+  - net-tools
+  - netplan.io
+  - apache2
+  - mysql-server
+  - fail2ban
+  - ufw
+
+# ==============================================
+# CONFIGURACIÓN DE MONITOREO
+# ==============================================
+monitoring_enabled: true
+log_directory: "/var/log/ansible_monitor"
+memory_check_interval: "*/1"  # cada minuto
+disk_check_interval: "*/5"   # cada 5 minutos
+
+# ==============================================
+# CONFIGURACIÓN SSH
+# ==============================================
+ssh_key_type: "ed25519"
+ssh_key_path: "/home/{{ default_user }}/.ssh/id_{{ ssh_key_type }}_ansible"
+
+# ==============================================
+# POLÍTICAS DE CONTRASEÑAS ACADÉMICAS
+# ==============================================
+academic_password_policy:
+  min_length: 8
+  max_age: 90
+  min_age: 1
+  warn_age: 7
+  history: 5
+  complexity: true
+  dictionary_check: true
+
+# ==============================================
+# CONFIGURACIÓN DE CUOTAS DE DISCO
+# ==============================================
+academic_quotas:
+  students:
+    soft_limit: "1G"
+    hard_limit: "2G"
+  practice:
+    soft_limit: "500M"
+    hard_limit: "1G"
+  admin:
+    soft_limit: "10G"
+    hard_limit: "20G"

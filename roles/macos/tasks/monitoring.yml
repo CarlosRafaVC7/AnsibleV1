@@ -1,0 +1,87 @@
+---
+# Configuración de monitoreo en macOS
+
+- name: Crear directorio de logs
+  ansible.builtin.file:
+    path: "{{ log_directory }}"
+    state: directory
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0755'
+  become: yes
+
+- name: Crear script de monitoreo de sistema
+  ansible.builtin.copy:
+    content: |
+      #!/bin/bash
+      # {{ ansible_managed_banner }}
+      # Script de monitoreo para macOS
+      
+      LOG_DIR="{{ log_directory }}"
+      DATE=$(date "+%Y-%m-%d %H:%M:%S")
+      
+      # Monitoreo de memoria
+      echo "[$DATE] Memory Usage:" >> "$LOG_DIR/memory.log"
+      vm_stat | head -10 >> "$LOG_DIR/memory.log"
+      echo "" >> "$LOG_DIR/memory.log"
+      
+      # Monitoreo de CPU
+      echo "[$DATE] CPU Usage:" >> "$LOG_DIR/cpu.log"
+      top -l 1 -n 5 | grep "CPU usage" >> "$LOG_DIR/cpu.log"
+      echo "" >> "$LOG_DIR/cpu.log"
+      
+      # Monitoreo de disco
+      echo "[$DATE] Disk Usage:" >> "$LOG_DIR/disk.log"
+      df -h >> "$LOG_DIR/disk.log"
+      echo "" >> "$LOG_DIR/disk.log"
+      
+      # Top processes
+      echo "[$DATE] Top Processes:" >> "$LOG_DIR/processes.log"
+      top -l 1 -n 10 -o cpu | grep -A 10 "PID COMMAND" >> "$LOG_DIR/processes.log"
+      echo "" >> "$LOG_DIR/processes.log"
+    dest: "{{ shared_folder }}/system_monitor.sh"
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0755'
+  become: yes
+
+- name: Crear plist para LaunchAgent de monitoreo
+  ansible.builtin.copy:
+    content: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+          <key>Label</key>
+          <string>com.ansible.system.monitor</string>
+          <key>ProgramArguments</key>
+          <array>
+              <string>/bin/bash</string>
+              <string>{{ shared_folder }}/system_monitor.sh</string>
+          </array>
+          <key>StartInterval</key>
+          <integer>{{ system_check_interval }}</integer>
+          <key>RunAtLoad</key>
+          <true/>
+          <key>StandardOutPath</key>
+          <string>{{ log_directory }}/monitor.out</string>
+          <key>StandardErrorPath</key>
+          <string>{{ log_directory }}/monitor.err</string>
+      </dict>
+      </plist>
+    dest: "/Users/{{ lab_user }}/Library/LaunchAgents/com.ansible.system.monitor.plist"
+    owner: "{{ lab_user }}"
+    group: staff
+    mode: '0644'
+  become: yes
+
+- name: Cargar LaunchAgent de monitoreo
+  ansible.builtin.command: launchctl load "/Users/{{ lab_user }}/Library/LaunchAgents/com.ansible.system.monitor.plist"
+  become: yes
+  become_user: "{{ lab_user }}"
+  register: launchctl_result
+  failed_when: false
+
+- name: Mostrar estado del LaunchAgent
+  ansible.builtin.debug:
+    msg: "LaunchAgent de monitoreo: {{ 'Cargado' if launchctl_result.rc == 0 else 'Error al cargar' }}"

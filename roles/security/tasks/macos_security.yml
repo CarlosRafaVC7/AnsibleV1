@@ -1,0 +1,52 @@
+---
+# Configuración de seguridad para sistemas macOS
+# Incluye firewall, SSH hardening, políticas de seguridad
+
+- name: Habilitar firewall de macOS
+  ansible.builtin.shell: |
+    /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+    /usr/libexec/ApplicationFirewall/socketfilterfw --setloggingmode on
+    /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
+
+- name: Configurar SSH hardening en macOS
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes
+  loop:
+    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
+    - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+    - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+    - { regexp: "^#?Protocol", line: "Protocol 2" }
+    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 3" }
+  notify: restart ssh macos
+
+- name: Deshabilitar servicios innecesarios de macOS
+  ansible.builtin.shell: |
+    launchctl unload -w /System/Library/LaunchDaemons/ftp.plist 2>/dev/null || true
+    launchctl unload -w /System/Library/LaunchDaemons/telnet.plist 2>/dev/null || true
+  ignore_errors: yes
+
+- name: Configurar políticas de seguridad de macOS
+  ansible.builtin.shell: |
+    # Requerir contraseña inmediatamente después del screensaver
+    defaults write com.apple.screensaver askForPassword -int 1
+    defaults write com.apple.screensaver askForPasswordDelay -int 0
+    
+    # Deshabilitar guest account
+    sudo dscl . -delete /Users/Guest
+    sudo defaults write /Library/Preferences/com.apple.loginwindow GuestEnabled -bool false
+    
+    # Configurar auditoría
+    sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.auditd.plist
+  ignore_errors: yes
+
+- name: Instalar y configurar herramientas de seguridad con Homebrew
+  community.general.homebrew:
+    name:
+      - fail2ban
+      - lynis
+      - rkhunter
+    state: present
+  ignore_errors: yes

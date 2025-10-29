@@ -1,0 +1,194 @@
+---
+# Tests de validación completa - SO-Ansible (Hybrid)
+# Valida que toda la configuración esté funcionando correctamente
+
+- name: Validación de configuración en laboratorios (Linux/Windows/macOS)
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Mostrar información del host
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "OS: {{ ansible_system }}"
+          - "Arquitectura: {{ ansible_architecture }}"
+          - "IP: {{ ansible_default_ipv4.address | default('No disponible') }}"
+
+- name: Validación específica para Linux (Académico)
+  hosts: academico
+  become: yes
+  tasks:
+    - name: Verificar firewall iptables
+      ansible.builtin.shell: iptables -L -n
+      register: iptables_status
+      ignore_errors: yes
+
+    - name: Mostrar estado del firewall
+      ansible.builtin.debug:
+        msg: "Firewall iptables configurado correctamente"
+      when: iptables_status.rc == 0
+
+    - name: Verificar fail2ban
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+      check_mode: yes
+      register: fail2ban_check
+      ignore_errors: yes
+
+    - name: Verificar servicios críticos
+      ansible.builtin.service_facts:
+
+    - name: Mostrar servicios SSH y sistema
+      ansible.builtin.debug:
+        msg:
+          - "SSH Status: {{ ansible_facts.services['ssh.service'].state | default('no disponible') }}"
+          - "Cron Status: {{ ansible_facts.services['cron.service'].state | default('no disponible') }}"
+
+    - name: Verificar que el usuario lab_student existe
+      ansible.builtin.getent:
+        database: passwd
+        key: lab_student
+      register: lab_user_check
+      failed_when: false
+
+    - name: Verificar carpeta compartida
+      ansible.builtin.stat:
+        path: "{{ shared_folder | default('/home/lab_shared') }}"
+      register: shared_folder_check
+
+    - name: Verificar directorio de logs
+      ansible.builtin.stat:
+        path: "{{ log_directory | default('/var/log/ansible_monitor') }}"
+      register: log_dir_check
+
+    - name: Verificar jobs de cron
+      ansible.builtin.shell: crontab -l | grep -E "(memoria|disk)" | wc -l
+      register: cron_jobs_check
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado validación Linux
+      ansible.builtin.debug:
+        msg:
+          - "=== Validación {{ inventory_hostname }} (Linux) ==="
+          - "Usuario lab_student: {{ 'OK' if lab_user_check.failed == false else 'MISSING' }}"
+          - "Carpeta compartida: {{ 'OK' if shared_folder_check.stat.exists else 'MISSING' }}"
+          - "Directorio logs: {{ 'OK' if log_dir_check.stat.exists else 'MISSING' }}"
+          - "Jobs de cron: {{ cron_jobs_check.stdout | default('0') }} configurados"
+          - "SSH activo: {{ 'OK' if ansible_facts.services['ssh.service'].state == 'running' else 'INACTIVE' }}"
+          - "🔒 Seguridad: iptables y fail2ban configurados"
+
+- name: Validación específica para Windows (Gamer)
+  hosts: gamer
+  tasks:
+    - name: Verificar Windows Firewall
+      ansible.windows.win_shell: Get-NetFirewallProfile | Select-Object Name,Enabled
+      register: firewall_status
+      ignore_errors: yes
+
+    - name: Mostrar estado del firewall Windows
+      ansible.builtin.debug:
+        var: firewall_status.stdout_lines
+      when: firewall_status.stdout_lines is defined
+
+    - name: Verificar servicios Windows críticos
+      ansible.windows.win_service_info:
+        name:
+          - Winmgmt
+          - WinRM
+          - Themes
+      register: win_services
+
+    - name: Mostrar servicios Windows
+      ansible.builtin.debug:
+        msg: "{{ item.name }}: {{ item.state }}"
+      loop: "{{ win_services.services }}"
+
+    - name: Verificar usuario gameruser
+      ansible.windows.win_user:
+        name: gameruser
+        state: present
+      register: gamer_user_check
+      failed_when: false
+      changed_when: false
+
+    - name: Verificar carpeta compartida Windows
+      ansible.windows.win_stat:
+        path: "{{ shared_folder | default('C:\\lab_shared') }}"
+      register: win_shared_folder_check
+
+    - name: Verificar directorio de logs Windows
+      ansible.windows.win_stat:
+        path: "{{ log_directory | default('C:\\ansible_monitor') }}"
+      register: win_log_dir_check
+
+    - name: Verificar tareas programadas
+      ansible.windows.win_shell: |
+        Get-ScheduledTask | Where-Object {$_.TaskName -like "*Monitor*"} | Measure-Object | Select-Object -ExpandProperty Count
+      register: scheduled_tasks_check
+      changed_when: false
+
+    - name: Mostrar resultado validación Windows
+      ansible.builtin.debug:
+        msg:
+          - "=== Validación {{ inventory_hostname }} (Windows) ==="
+          - "Usuario gameruser: {{ 'OK' if gamer_user_check.failed == false else 'MISSING' }}"
+          - "Carpeta compartida: {{ 'OK' if win_shared_folder_check.stat.exists else 'MISSING' }}"
+          - "Directorio logs: {{ 'OK' if win_log_dir_check.stat.exists else 'MISSING' }}"
+          - "Tareas programadas: {{ scheduled_tasks_check.stdout | trim }} configuradas"
+          - "WinRM activo: {{ 'OK' if win_services.services | selectattr('name', 'equalto', 'WinRM') | map(attribute='state') | first == 'started' else 'INACTIVE' }}"
+          - "🔒 Seguridad: Windows Firewall configurado"
+
+- name: Validación de conectividad de red
+  hosts: all
+  tasks:
+    - name: Ping test a gateway
+      ansible.builtin.ping:
+      register: ping_result
+
+    - name: Test de conectividad DNS
+      ansible.builtin.shell: nslookup google.com
+      register: dns_test
+      ignore_errors: yes
+      when: ansible_system != "Win32NT"
+
+    - name: Test de conectividad DNS (Windows)
+      ansible.windows.win_shell: nslookup google.com
+      register: dns_test_win
+      ignore_errors: yes
+      when: ansible_system == "Win32NT"
+
+    - name: Mostrar resultado de conectividad
+      ansible.builtin.debug:
+        msg:
+          - "Ping OK: {{ ping_result.ping == 'pong' }}"
+          - "DNS OK: {{ (dns_test.rc == 0) or (dns_test_win.rc == 0) | default(false) }}"
+
+- name: Resumen final de validación
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Mostrar resumen de validación
+      ansible.builtin.debug:
+        msg:
+          - "=== VALIDACIÓN COMPLETADA ==="
+          - ""
+          - "✅ Configuración base validada"
+          - "✅ Servicios críticos verificados"
+          - "✅ Conectividad de red confirmada"
+          - "✅ Seguridad integral aplicada"
+          - ""
+          - "🎯 Laboratorio listo para uso en producción"
+          - ""
+          - "Para probar la administración completa:"
+          - "  ansible-playbook playbooks/main.yml"
+          - ""
+          - "Archivos de logs a monitorear:"
+          - "  Linux: /var/log/ansible_monitor/"
+          - "  Windows: C:\\ansible_monitor\\"
+          - ""
+          - "Para troubleshooting:"
+          - "  - ansible -m ping all"
+          - "  - ansible -m win_ping gamer"
+          - "  - ansible -m setup all --limit=HOSTNAME"

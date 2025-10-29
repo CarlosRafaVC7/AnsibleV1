@@ -1,0 +1,217 @@
+---
+# Configuración avanzada de usuarios y grupos - Seguridad integral
+# Creación y configuración de usuarios específicos por laboratorio
+
+- name: "🔐 CONFIGURACIÓN DE USUARIOS Y GRUPOS"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "🔐 INICIANDO CONFIGURACIÓN DE USUARIOS Y GRUPOS"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "OS: {{ ansible_system }}"
+      - "Fecha: {{ ansible_date_time.date }}"
+      - "=================================================="
+
+# ==============================================
+# TAREAS PARA LINUX (ACADÉMICO)
+# ==============================================
+- name: "Configurar usuarios y grupos en Linux"
+  block:
+    - name: "👥 Crear grupos académicos"
+      ansible.builtin.group:
+        name: "{{ item.name }}"
+        gid: "{{ item.gid | default(omit) }}"
+        state: present
+      loop: "{{ academic_groups }}"
+      when: academic_groups is defined
+
+    - name: "👤 Crear usuarios académicos"
+      ansible.builtin.user:
+        name: "{{ item.username }}"
+        comment: "{{ item.fullname }}"
+        groups: "{{ item.groups | join(',') }}"
+        shell: "{{ item.shell | default('/bin/bash') }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        create_home: yes
+        home: "/home/{{ item.username }}"
+        state: present
+      loop: "{{ academic_users }}"
+      when: academic_users is defined
+      no_log: true  # No mostrar contraseñas en logs
+
+    - name: "🏠 Configurar permisos de directorios home"
+      ansible.builtin.file:
+        path: "/home/{{ item.username }}"
+        mode: "{{ item.home_mode | default('0755') }}"
+        owner: "{{ item.username }}"
+        group: "{{ item.username }}"
+      loop: "{{ academic_users }}"
+      when: academic_users is defined
+
+    - name: "⚙️ Configurar sudo para usuarios específicos"
+      ansible.builtin.template:
+        src: "sudoers_user.j2"
+        dest: "/etc/sudoers.d/{{ item.username }}"
+        mode: "0440"
+        owner: root
+        group: root
+        validate: '/usr/sbin/visudo -cf %s'
+      loop: "{{ academic_users }}"
+      when: 
+        - academic_users is defined
+        - item.sudo_nopasswd is defined and item.sudo_nopasswd
+
+    - name: "📁 Crear directorios compartidos académicos"
+      ansible.builtin.file:
+        path: "{{ item.value.path }}"
+        state: directory
+        owner: "{{ item.value.owner }}"
+        group: "{{ item.value.group }}"
+        mode: "{{ item.value.mode }}"
+      loop: "{{ academic_directories | dict2items }}"
+      when: academic_directories is defined
+
+    - name: "💾 Configurar cuotas de disco (si quotas están habilitadas)"
+      ansible.builtin.shell: |
+        setquota -u {{ item.key }} {{ item.value.soft_limit }} {{ item.value.hard_limit }} 0 0 /home
+      loop: "{{ academic_quotas | dict2items }}"
+      when: 
+        - academic_quotas is defined
+        - ansible_mounts | selectattr('mount', 'equalto', '/home') | list | length > 0
+      ignore_errors: yes
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - users
+    - groups
+    - academic
+    - linux
+
+# ==============================================
+# TAREAS PARA WINDOWS (GAMER)
+# ==============================================
+- name: "Configurar usuarios y grupos en Windows"
+  block:
+    - name: "👥 Crear grupos gamer en Windows"
+      ansible.windows.win_group:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        state: present
+      loop: "{{ gamer_groups }}"
+      when: gamer_groups is defined
+
+    - name: "👤 Crear usuarios gamer en Windows"
+      ansible.windows.win_user:
+        name: "{{ item.username }}"
+        fullname: "{{ item.fullname }}"
+        password: "{{ item.password }}"
+        groups: "{{ item.groups }}"
+        password_never_expires: "{{ item.password_never_expires | default(false) }}"
+        user_cannot_change_password: "{{ item.user_cannot_change_password | default(false) }}"
+        state: present
+      loop: "{{ gamer_users }}"
+      when: gamer_users is defined
+      no_log: true  # No mostrar contraseñas en logs
+
+    - name: "🏠 Crear directorio compartido gamer"
+      ansible.windows.win_file:
+        path: "{{ shared_folder }}"
+        state: directory
+
+    - name: "📁 Crear directorios específicos de gaming"
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "{{ gamer_storage.game_library_path | default('D:\\Games') }}"
+        - "C:\\GameBackups"
+        - "C:\\GameConfigs"
+        - "{{ log_directory }}"
+
+    - name: "🎮 Configurar optimizaciones de rendimiento gaming"
+      ansible.windows.win_shell: |
+        # Configurar plan de energía para alto rendimiento
+        powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+        
+        # Habilitar modo juego
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\GameBar" /v "AllowAutoGameMode" /t REG_DWORD /d 1 /f
+        
+        # Deshabilitar optimizaciones de pantalla completa
+        reg add "HKEY_CURRENT_USER\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f
+      when: gamer_performance is defined and gamer_performance.game_mode
+
+  when: ansible_os_family == "Windows"
+  tags:
+    - users
+    - groups
+    - gamer
+    - windows
+
+# ==============================================
+# CONFIGURACIÓN COMÚN DE SEGURIDAD
+# ==============================================
+- name: "🔒 Aplicar políticas de contraseñas"
+  block:
+    - name: "Configurar política de contraseñas en Linux"
+      ansible.builtin.template:
+        src: "pwquality.conf.j2"
+        dest: "/etc/security/pwquality.conf"
+        backup: yes
+      when: 
+        - ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+        - academic_password_policy is defined
+
+    - name: "Configurar política de contraseñas en Windows"
+      ansible.windows.win_shell: |
+        # Configurar política de contraseñas
+        net accounts /minpwlen:{{ gamer_password_policy.min_length }}
+        net accounts /maxpwage:{{ gamer_password_policy.max_age }}
+        net accounts /minpwage:{{ gamer_password_policy.min_age }}
+        net accounts /uniquepw:{{ gamer_password_policy.history }}
+      when: 
+        - ansible_os_family == "Windows"
+        - gamer_password_policy is defined
+      ignore_errors: yes
+
+  tags:
+    - security
+    - password_policy
+
+# ==============================================
+# VALIDACIÓN Y REPORTE
+# ==============================================
+- name: "✅ Validar configuración de usuarios"
+  block:
+    - name: "Validar usuarios en Linux"
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ item.username }}"
+      loop: "{{ academic_users }}"
+      when: 
+        - ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+        - academic_users is defined
+      register: linux_users_check
+
+    - name: "Validar usuarios en Windows"
+      ansible.windows.win_shell: |
+        Get-LocalUser -Name "{{ item.username }}" | Select-Object Name,Enabled,LastLogon
+      loop: "{{ gamer_users }}"
+      when: 
+        - ansible_os_family == "Windows"
+        - gamer_users is defined
+      register: windows_users_check
+
+    - name: "📊 Mostrar resumen de usuarios creados"
+      ansible.builtin.debug:
+        msg:
+          - "=== RESUMEN DE USUARIOS CONFIGURADOS ==="
+          - "Host: {{ inventory_hostname }}"
+          - "Sistema: {{ ansible_system }}"
+          - "Usuarios Linux: {{ linux_users_check.results | length if linux_users_check is defined else 0 }}"
+          - "Usuarios Windows: {{ windows_users_check.results | length if windows_users_check is defined else 0 }}"
+          - "Estado: ✅ Configuración completada"
+
+  tags:
+    - validation
+    - users

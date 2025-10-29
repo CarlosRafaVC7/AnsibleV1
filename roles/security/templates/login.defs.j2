@@ -1,0 +1,69 @@
+# Configuración de login.defs - Políticas de contraseñas
+# Generado por Ansible - {{ ansible_managed_banner }}
+
+# ==============================================
+# CONFIGURACIÓN DE CONTRASEÑAS
+# ==============================================
+{% if academic_password_policy is defined %}
+PASS_MAX_DAYS   {{ academic_password_policy.max_age | default(90) }}
+PASS_MIN_DAYS   {{ academic_password_policy.min_age | default(1) }}
+PASS_WARN_AGE   {{ academic_password_policy.warn_age | default(7) }}
+PASS_MIN_LEN    {{ academic_password_policy.min_length | default(8) }}
+{% else %}
+PASS_MAX_DAYS   90
+PASS_MIN_DAYS   1
+PASS_WARN_AGE   7
+PASS_MIN_LEN    8
+{% endif %}
+
+# ==============================================
+# CONFIGURACIÓN DE USUARIOS Y GRUPOS
+# ==============================================
+UID_MIN                  1000
+UID_MAX                 60000
+SYS_UID_MIN               201
+SYS_UID_MAX               999
+
+GID_MIN                  1000
+GID_MAX                 60000
+SYS_GID_MIN               201
+SYS_GID_MAX               999
+
+# ==============================================
+# CONFIGURACIÓN DE DIRECTORIOS HOME
+# ==============================================
+CREATE_HOME             yes
+UMASK                   022
+USERGROUPS_ENAB         yes
+ENCRYPT_METHOD          SHA512
+
+# ==============================================
+# CONFIGURACIÓN DE LOGIN
+# ==============================================
+LOGIN_RETRIES           {{ security.max_login_attempts | default(3) }}
+LOGIN_TIMEOUT           60
+DEFAULT_HOME            yes
+USERDEF_CMD             /usr/sbin/useradd.local
+
+# ==============================================
+# CONFIGURACIÓN DE MAIL Y LOG
+# ==============================================
+MAIL_DIR                /var/mail
+FAILLOG_ENAB            yes
+LOG_UNKFAIL_ENAB        no
+LOG_OK_LOGINS           no
+SYSLOG_SU_ENAB          yes
+SYSLOG_SG_ENAB          yes
+
+# ==============================================
+# CONFIGURACIÓN DE CHROOT
+# ==============================================
+CHFN_RESTRICT           rwh
+CONSOLE_GROUPS          floppy:audio:cdrom
+
+# ==============================================
+# CONFIGURACIÓN DE HASHING
+# ==============================================
+MD5_CRYPT_ENAB          no
+SHA_CRYPT_MIN_ROUNDS    5000
+SHA_CRYPT_MAX_ROUNDS    10000

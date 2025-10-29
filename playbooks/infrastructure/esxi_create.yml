@@ -1,0 +1,83 @@
+---
+# Playbook para crear VMs completas en VMware ESXi
+# Basado en mejores prácticas: crea VM, monta ISO, enciende
+# Listo para instalación manual de sistemas operativos
+
+- name: Crear VMs funcionales en infraestructura ESXi
+  hosts: localhost
+  gather_facts: no
+  collections: 
+    - community.vmware
+  vars:
+    esxi_host: "168.121.48.254:10121"
+    esxi_user: "root"
+    esxi_pass: "qwe123$"
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    datacenter_name: "ha-datacenter"
+    
+    # Configuración del datastore
+    datastore_name: "datastore1"
+    vm_network: "VM Network"
+    
+    # ISOs en el datastore (actualizar según disponibilidad)
+    ubuntu_iso_path: "[datastore1] ubuntu-24.04.3-live-server-amd64.iso"
+    windows_iso_path: "[datastore1] Win11_24H2_Spanish_x64.iso"
+    
+    # Configuración de VMs
+    vm_ubuntu_name: "Ubuntu-Academico"
+    vm_ubuntu_memory: 4096
+    vm_ubuntu_cpus: 2
+    vm_ubuntu_disk: 40
+
+    vm_windows_name: "Windows-Gamer"
+    vm_windows_memory: 8192
+    vm_windows_cpus: 4
+    vm_windows_disk: 80
+
+    # Opciones de creación
+    create_vm_academico: true
+    create_vm_gamer: true
+    mount_isos: true          # Nuevo: montar ISOs automáticamente
+    power_on_vms: true        # Nuevo: encender VMs al final
+    
+  pre_tasks:
+    - name: Verificar que las variables ESXi estén definidas
+      ansible.builtin.assert:
+        that:
+          - esxi_host is defined
+          - esxi_user is defined
+          - esxi_pass is defined
+        fail_msg: "Configure las variables ESXi antes de ejecutar"
+        
+    - name: Informar sobre el proceso mejorado
+      ansible.builtin.debug:
+        msg:
+          - "🚀 CREACIÓN COMPLETA DE VMs EN ESXi"
+          - "📡 Host: {{ esxi_host }}"
+          - "💾 Datastore: {{ datastore_name }}"
+          - "🌐 Red: {{ vm_network }}"
+          - "� Montaje ISO: {{ 'Habilitado' if mount_isos else 'Deshabilitado' }}"
+          - "⚡ Encendido automático: {{ 'Sí' if power_on_vms else 'No' }}"
+        
+  roles:
+    - infrastructure
+    
+  post_tasks:
+    - name: Instrucciones post-creación actualizadas
+      ansible.builtin.debug:
+        msg:
+          - "✅ VMs COMPLETAS CREADAS EN ESXi {{ esxi_host }}"
+          - ""
+          - "�️  ESTADO DE LAS VMs:"
+          - "   • {{ vm_ubuntu_name }}: {{ vm_ubuntu_memory }}MB, {{ vm_ubuntu_cpus }} CPU, {{ vm_ubuntu_disk }}GB"
+          - "   • {{ vm_windows_name }}: {{ vm_windows_memory }}MB, {{ vm_windows_cpus }} CPU, {{ vm_windows_disk }}GB"
+          - ""
+          - "📋 PRÓXIMOS PASOS:"
+          - "1. 🌐 Acceder a ESXi Host Client: https://{{ esxi_host.split(':')[0] }}:443"
+          - "2. 📀 VMs encendidas con ISOs montados - listas para instalar OS"
+          - "3. 📖 Seguir guía: docs/INSTALACION_MANUAL.md"
+          - "4. 🔌 Configurar red y SSH/WinRM en cada VM"
+          - "5. 📝 Actualizar inventory/hosts.ini con IPs reales"
+          - "6. 🎯 Ejecutar: ansible-playbook playbooks/main.yml"
+          - ""
+          - "✨ Las VMs están listas para instalación manual de OS"
