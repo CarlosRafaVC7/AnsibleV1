@@ -1,44 +1,142 @@
 ---
-# Variables globales para todos los hosts
+# Variables globales para SO-Ansible (Hybrid)
+# Configuración base para todos los hosts
 
-# Configuración general del proyecto
-project_name: "SO-Ansible-Hybrid"
-project_version: "1.0"
+# ==============================================
+# CONFIGURACIÓN GENERAL DEL PROYECTO
+# ==============================================
+project_name: "SO-Ansible Hybrid Lab"
+project_version: "2.0"
 ansible_managed_banner: "*** Archivo gestionado por Ansible - No editar manualmente ***"
+deployment_date: "{{ ansible_date_time.date }}"
 
-# Configuración IPv6 global
-ipv6_prefix: "2001:db8:1"
-ipv6_preferred: true
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD GLOBAL
+# ==============================================
+security:
+  enforce_password_policy: true
+  max_login_attempts: 3
+  session_timeout: 1800  # 30 minutos
+  require_sudo_password: true
+  enable_audit_logging: true
+  password_min_length: 12
+  password_complexity: true
+  
+# Configuración de firewall global
+firewall:
+  default_policy: "DROP"
+  allowed_ports:
+    ssh: 22
+    http: 80
+    https: 443
+    rdp: 3389
+    winrm: 5985
+    winrm_ssl: 5986
+    mysql: 3306
+    postgresql: 5432
 
-# DNS servers (IPv6 + IPv4 fallback)
-dns_servers:
-  - "2001:4860:4860::8888"  # Google DNS IPv6
-  - "2001:4860:4860::8844"  # Google DNS IPv6
-  - "8.8.8.8"               # Google DNS IPv4
-  - "8.8.4.4"               # Google DNS IPv4
+# ==============================================
+# CONFIGURACIÓN DE RED Y NIC
+# ==============================================
+network:
+  domain: "lab.local"
+  # DNS servers (IPv6 + IPv4 fallback)
+  dns_servers:
+    - "2001:4860:4860::8888"  # Google DNS IPv6
+    - "2001:4860:4860::8844"  # Google DNS IPv6
+    - "8.8.8.8"               # Google DNS IPv4
+    - "8.8.4.4"               # Google DNS IPv4
+  # NTP servers
+  ntp_servers:
+    - "pool.ntp.org"
+    - "time.cloudflare.com"
+  # Configuración IPv6 global
+  ipv6_prefix: "2001:db8:1"
+  ipv6_preferred: true
+  
+# VLAN Configuration para seguridad de red
+vlans:
+  academico:
+    id: 100
+    subnet: "192.168.100.0/24"
+    description: "Red Académica"
+    security_level: "medium"
+  gamer:
+    id: 200
+    subnet: "192.168.200.0/24"
+    description: "Red Gaming"
+    security_level: "high"
+  management:
+    id: 10
+    subnet: "192.168.10.0/24"
+    description: "Red de Gestión"
+    security_level: "critical"
 
-# NTP servers
-ntp_servers:
-  - "pool.ntp.org"
-  - "time.cloudflare.com"
+# ==============================================
+# CONFIGURACIÓN DE MONITOREO Y LOGS
+# ==============================================
+monitoring:
+  log_directory: "/var/log/ansible_security"
+  log_rotation: true
+  log_max_size: "100M"
+  log_retention_days: 30
+  alert_email: "admin@lab.local"
+  enable_syslog: true
+  enable_audit: true
 
-# Timezone
+# ==============================================
+# CONFIGURACIÓN DE BACKUP
+# ==============================================
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Diario a las 2 AM
+  retention_days: 7
+  directory: "/backup/ansible"
+
+# ==============================================
+# CONFIGURACIÓN DE TIMEZONE Y UPDATES
+# ==============================================
 timezone: "America/Lima"
-
-# Configuración de logs
-log_rotation: true
-log_max_size: "100M"
-log_retention_days: 30
-
-# Configuración de seguridad
-disable_root_ssh: true
-ssh_port: 22
-ssh_protocol: 2
-
-# Configuración de backup (futuro)
-backup_enabled: false
-backup_directory: "/backup/ansible"
-
-# Configuración de actualizaciones automáticas
 auto_updates: false
 reboot_after_updates: false
+
+# ==============================================
+# CONFIGURACIÓN SSH GLOBAL
+# ==============================================
+ssh:
+  disable_root_ssh: true
+  port: 22
+  protocol: 2
+  max_auth_tries: 3
+  login_grace_time: 60
+  permit_empty_passwords: false
+  password_authentication: true
+  pubkey_authentication: true
+
+# ==============================================
+# INFORMACIÓN DE ESXI
+# ==============================================
+esxi:
+  host: "192.168.121.48.254"
+  port: 10121
+  datacenter: "ha-datacenter"
+  cluster: "lab-cluster"
+  
+# ==============================================
+# VARIABLES PARA REEMPLAZAR CON VAULT
+# ==============================================
+# NOTA: Estas variables serán sobrescritas por vault_vars.yml
+# Solo se mantienen como referencia de estructura
+
+# Credenciales por defecto (SERÁN ENCRIPTADAS)
+default_passwords:
+  admin_user: "{{ vault_admin_password | default('changeme123!') }}"
+  lab_student: "{{ vault_student_password | default('student123!') }}"
+  gamer_user: "{{ vault_gamer_password | default('gamer123!') }}"
+  database: "{{ vault_db_password | default('db123!') }}"
+  esxi: "{{ vault_esxi_password | default('esxi123!') }}"
+
+# Usuarios por defecto
+default_users:
+  admin: "{{ vault_admin_username | default('labadmin') }}"
+  esxi: "{{ vault_esxi_username | default('root') }}"

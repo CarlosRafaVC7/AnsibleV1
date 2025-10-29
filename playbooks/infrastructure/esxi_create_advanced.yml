@@ -1,0 +1,226 @@
+---
+# Playbook avanzado para crear VMs completas en VMware ESXi
+# Incluye: creación, montaje ISO, encendido y validación
+
+- name: Crear VMs completas en ESXi con ISO y encendido
+  hosts: localhost
+  gather_facts: no
+  collections: 
+    - community.vmware
+    
+  vars:
+    # Configuración ESXi
+    esxi_host: "168.121.48.254:10121"
+    esxi_user: "root"
+    esxi_pass: "qwe123$"
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    ds_name: "datastore1"
+    portgroup: "VM Network"
+    
+    # ISOs disponibles en ESXi datastore
+    ubuntu_iso_path: "[datastore1] ubuntu-24.04.3-live-server-amd64.iso"
+    windows_iso_path: "[datastore1] Win11_24H2_Spanish_x64.iso"
+    
+    # VMs a crear
+    vms:
+      - name: "Ubuntu-Academico"
+        guest_id: "ubuntu64Guest"
+        memory_mb: 4096
+        num_cpus: 2
+        disk_gb: 40
+        iso_path: "{{ ubuntu_iso_path }}"
+        description: "VM Ubuntu para laboratorio académico"
+        
+      - name: "Windows-Gamer"
+        guest_id: "windows9_64Guest"
+        memory_mb: 8192
+        num_cpus: 4
+        disk_gb: 80
+        iso_path: "{{ windows_iso_path }}"
+        description: "VM Windows para laboratorio gamer"
+
+  pre_tasks:
+    - name: Validar configuración ESXi
+      ansible.builtin.assert:
+        that:
+          - esxi_host is defined
+          - esxi_user is defined
+          - esxi_pass is defined
+          - ds_name is defined
+        fail_msg: "Configure todas las variables ESXi requeridas"
+        
+    - name: Mostrar información del proceso
+      ansible.builtin.debug:
+        msg:
+          - "🚀 CREACIÓN AVANZADA DE VMs EN ESXi"
+          - "📡 Host: {{ esxi_host }}"
+          - "💾 Datastore: {{ ds_name }}"
+          - "🌐 Red: {{ portgroup }}"
+          - "📀 ISOs: Montaje automático incluido"
+
+  tasks:
+    - name: Crear/configurar VM "{{ item.name }}"
+      include_tasks: create_vm_with_iso.yml
+      loop: "{{ vms }}"
+      loop_control:
+        loop_var: vm_config
+
+  post_tasks:
+    - name: Obtener información final de todas las VMs
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ item.name }}"
+      register: vms_final_info
+      loop: "{{ vms }}"
+      ignore_errors: true
+
+    - name: Resumen final del proceso
+      ansible.builtin.debug:
+        msg:
+          - "✅ PROCESO COMPLETADO"
+          - ""
+          - "📋 VMs creadas y configuradas:"
+          - "{% for vm in vms %}"
+          - "  🖥️  {{ vm.name }}: {{ vm.memory_mb }}MB RAM, {{ vm.num_cpus }} CPU, {{ vm.disk_gb }}GB"
+          - "{% endfor %}"
+          - ""
+          - "🎯 PRÓXIMOS PASOS:"
+          - "1. Acceder a ESXi Host Client: https://{{ esxi_host.split(':')[0] }}:443"
+          - "2. Las VMs están encendidas con ISOs montados"
+          - "3. Instalar OS siguiendo docs/INSTALACION_MANUAL.md"
+          - "4. Configurar red y SSH/WinRM"
+          - "5. Actualizar inventory/hosts.ini"
+          - "6. Ejecutar: ansible-playbook playbooks/main.yml"
+
+# Tareas incluidas para cada VM
+- name: create_vm_with_iso.yml
+  block:
+    - name: "Verificar si VM {{ vm_config.name }} existe"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ vm_config.name }}"
+      register: vm_exists
+      failed_when: false
+
+    - name: "Crear VM base {{ vm_config.name }}"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: present
+        guest_id: "{{ vm_config.guest_id }}"
+        datastore: "{{ ds_name }}"
+        hardware:
+          memory_mb: "{{ vm_config.memory_mb }}"
+          num_cpus: "{{ vm_config.num_cpus }}"
+          scsi: paravirtual
+        disk:
+          - size_gb: "{{ vm_config.disk_gb }}"
+            type: thin
+            datastore: "{{ ds_name }}"
+        wait_for_ip_address: no
+        state_change_timeout: 180
+      when: vm_exists.instance is not defined
+
+    - name: "Configurar red en {{ vm_config.name }}"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: present
+        networks:
+          - name: "{{ portgroup }}"
+            start_connected: true
+            device_type: vmxnet3
+
+    - name: "Apagar {{ vm_config.name }} para configurar CD-ROM"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: poweredoff
+      ignore_errors: true
+
+    - name: "Montar ISO {{ vm_config.iso_path }} en {{ vm_config.name }} (IDE)"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: present
+        cdrom:
+          - type: iso
+            iso_path: "{{ vm_config.iso_path }}"
+            controller_type: ide
+            controller_number: 0
+            unit_number: 0
+      register: cdrom_ide_result
+      ignore_errors: true
+
+    - name: "Montar ISO {{ vm_config.iso_path }} en {{ vm_config.name }} (SATA fallback)"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: present
+        cdrom:
+          - type: iso
+            iso_path: "{{ vm_config.iso_path }}"
+            controller_type: sata
+            controller_number: 0
+            unit_number: 0
+      when: cdrom_ide_result is failed
+      ignore_errors: true
+
+    - name: "Encender VM {{ vm_config.name }}"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_config.name }}"
+        state: poweredon
+
+    - name: "Obtener información de {{ vm_config.name }}"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ vm_config.name }}"
+      register: vm_info
+
+    - name: "Mostrar estado de {{ vm_config.name }}"
+      ansible.builtin.debug:
+        msg:
+          - "✅ VM {{ vm_config.name }} configurada:"
+          - "   Estado: {{ vm_info.instance.hw_power_state | default('unknown') }}"
+          - "   CD/DVD: {{ (vm_info.instance.hw_files | selectattr('type','equalto','iso') | list | length) or 'Sin ISO' }}"
+          - "   Red: {{ vm_info.instance.hw_eth0.macaddress | default('Sin MAC') }}"

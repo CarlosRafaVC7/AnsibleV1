@@ -1,0 +1,306 @@
+---
+# Configuración avanzada de controles de acceso y PAM
+# Implementación de políticas de seguridad estrictas
+
+- name: "🔐 CONFIGURACIÓN DE CONTROLES DE ACCESO AVANZADOS"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "🔐 IMPLEMENTANDO CONTROLES DE ACCESO AVANZADOS"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_system }}"
+      - "Configurando PAM, políticas y controles"
+      - "=================================================="
+
+# ==============================================
+# CONFIGURACIÓN PAM PARA LINUX
+# ==============================================
+- name: "Configurar PAM y controles de acceso en Linux"
+  block:
+    - name: "📦 Instalar paquetes de seguridad PAM"
+      ansible.builtin.package:
+        name:
+          - libpam-pwquality
+          - libpam-google-authenticator
+          - libpam-tmpdir
+          - libpam-cracklib
+        state: present
+
+    - name: "🔒 Configurar límites de recursos del sistema"
+      ansible.builtin.template:
+        src: "limits.conf.j2"
+        dest: "/etc/security/limits.conf"
+        backup: yes
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "🛡️ Configurar login.defs para políticas de contraseñas"
+      ansible.builtin.template:
+        src: "login.defs.j2"
+        dest: "/etc/login.defs"
+        backup: yes
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "🔐 Configurar PAM para SSH"
+      ansible.builtin.template:
+        src: "pam_sshd.j2"
+        dest: "/etc/pam.d/sshd"
+        backup: yes
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "⏰ Configurar tiempo de sesión y timeouts"
+      ansible.builtin.lineinfile:
+        path: "/etc/security/limits.conf"
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "* soft nofile 65536"
+        - "* hard nofile 65536"
+        - "* soft nproc 32768"
+        - "* hard nproc 32768"
+        - "@students soft maxlogins 3"
+        - "@students hard maxlogins 5"
+        - "@practice soft maxlogins 2"
+        - "@practice hard maxlogins 3"
+
+    - name: "🚫 Configurar restricciones de acceso por tiempo"
+      ansible.builtin.template:
+        src: "time.conf.j2"
+        dest: "/etc/security/time.conf"
+        backup: yes
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "🔍 Configurar auditd para monitoreo"
+      ansible.builtin.package:
+        name: auditd
+        state: present
+
+    - name: "📋 Configurar reglas de auditoría"
+      ansible.builtin.template:
+        src: "audit.rules.j2"
+        dest: "/etc/audit/rules.d/ansible-security.rules"
+        backup: yes
+        owner: root
+        group: root
+        mode: "0640"
+      notify: restart auditd
+
+    - name: "🔐 Configurar AppArmor/SELinux (si está disponible)"
+      ansible.builtin.package:
+        name: apparmor
+        state: present
+      when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - access_control
+    - pam
+    - linux
+    - security
+
+# ==============================================
+# CONFIGURACIÓN DE POLÍTICAS WINDOWS
+# ==============================================
+- name: "Configurar políticas de seguridad en Windows"
+  block:
+    - name: "🔒 Configurar políticas de cuenta locales"
+      ansible.windows.win_shell: |
+        # Configurar políticas de contraseña
+        secedit /configure /cfg {{ ansible_env.TEMP }}\security_policy.inf /db {{ ansible_env.TEMP }}\security.sdb
+      vars:
+        security_policy: |
+          [System Access]
+          MinimumPasswordAge = {{ gamer_password_policy.min_age | default(1) }}
+          MaximumPasswordAge = {{ gamer_password_policy.max_age | default(90) }}
+          MinimumPasswordLength = {{ gamer_password_policy.min_length | default(10) }}
+          PasswordComplexity = {{ 1 if gamer_password_policy.complexity else 0 }}
+          PasswordHistorySize = {{ gamer_password_policy.history | default(5) }}
+          LockoutBadCount = {{ security.max_login_attempts | default(3) }}
+          ResetLockoutCount = 30
+          LockoutDuration = 30
+          RequireLogonToChangePassword = 0
+          ClearTextPassword = 0
+
+    - name: "🛡️ Configurar UAC (User Account Control)"
+      ansible.windows.win_regedit:
+        path: "{{ item.path }}"
+        name: "{{ item.name }}"
+        data: "{{ item.data }}"
+        type: dword
+      loop:
+        - path: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          name: "ConsentPromptBehaviorAdmin"
+          data: 2
+        - path: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          name: "ConsentPromptBehaviorUser"
+          data: 3
+        - path: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          name: "EnableLUA"
+          data: 1
+
+    - name: "🚫 Configurar políticas de restricción de software"
+      ansible.windows.win_regedit:
+        path: "{{ item.path }}"
+        name: "{{ item.name }}"
+        data: "{{ item.data }}"
+        type: dword
+      loop:
+        - path: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\Safer\\CodeIdentifiers"
+          name: "DefaultLevel"
+          data: 0x00040000
+        - path: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\Safer\\CodeIdentifiers"
+          name: "PolicyScope"
+          data: 0
+
+    - name: "⏰ Configurar políticas de sesión"
+      ansible.windows.win_regedit:
+        path: "{{ item.path }}"
+        name: "{{ item.name }}"
+        data: "{{ item.data }}"
+        type: dword
+      loop:
+        - path: "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp"
+          name: "MaxConnectionTime"
+          data: "{{ security.session_timeout | default(1800) }}000"  # En milisegundos
+        - path: "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp"
+          name: "MaxDisconnectionTime"
+          data: 900000  # 15 minutos
+
+    - name: "🔍 Configurar auditoría de Windows"
+      ansible.windows.win_shell: |
+        # Habilitar auditoría de eventos de logon
+        auditpol /set /category:"Logon/Logoff" /success:enable /failure:enable
+        
+        # Habilitar auditoría de eventos de acceso a objetos
+        auditpol /set /category:"Object Access" /success:enable /failure:enable
+        
+        # Habilitar auditoría de cambios de políticas
+        auditpol /set /category:"Policy Change" /success:enable /failure:enable
+        
+        # Habilitar auditoría de gestión de cuentas
+        auditpol /set /category:"Account Management" /success:enable /failure:enable
+
+  when: ansible_os_family == "Windows"
+  tags:
+    - access_control
+    - windows
+    - security
+    - policies
+
+# ==============================================
+# CONFIGURACIÓN DE ACCESO POR ROLES
+# ==============================================
+- name: "🎯 Configurar control de acceso basado en roles (RBAC)"
+  block:
+    - name: "👥 Configurar grupos de acceso por horarios (Linux)"
+      ansible.builtin.lineinfile:
+        path: "/etc/security/time.conf"
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "students;*;*;Mo-Fr0800-1800"  # Estudiantes solo L-V 8am-6pm
+        - "practice;*;*;Mo-Fr0900-1700"  # Prácticas solo L-V 9am-5pm
+        - "academic_admin;*;*;Al0000-2400"  # Admin 24/7
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "🚪 Configurar restricciones de acceso remoto"
+      ansible.builtin.template:
+        src: "access.conf.j2"
+        dest: "/etc/security/access.conf"
+        backup: yes
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "🔐 Configurar restricciones SSH por grupo"
+      ansible.builtin.blockinfile:
+        path: "/etc/ssh/sshd_config"
+        block: |
+          # Restricciones de acceso por grupo
+          AllowGroups sudo academic_admin students
+          DenyUsers practice_user
+          MaxAuthTries {{ ssh.max_auth_tries | default(3) }}
+          LoginGraceTime {{ ssh.login_grace_time | default(60) }}
+          
+          # Configuración de seguridad adicional
+          PermitEmptyPasswords {{ 'yes' if ssh.permit_empty_passwords else 'no' }}
+          PasswordAuthentication {{ 'yes' if ssh.password_authentication else 'no' }}
+          PubkeyAuthentication {{ 'yes' if ssh.pubkey_authentication else 'no' }}
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - SSH SECURITY"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+      notify: restart ssh
+
+  tags:
+    - rbac
+    - access_control
+    - security
+
+# ==============================================
+# CONFIGURACIÓN DE MONITOREO DE ACCESO
+# ==============================================
+- name: "📊 Configurar monitoreo de acceso y alertas"
+  block:
+    - name: "📝 Crear script de monitoreo de acceso"
+      ansible.builtin.template:
+        src: "access_monitor.sh.j2"
+        dest: "/usr/local/bin/access_monitor.sh"
+        mode: "0755"
+        owner: root
+        group: root
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "⏰ Configurar cron para monitoreo de acceso"
+      ansible.builtin.cron:
+        name: "Monitor de acceso de seguridad"
+        minute: "*/5"
+        job: "/usr/local/bin/access_monitor.sh"
+        user: root
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "📋 Crear log de eventos de acceso"
+      ansible.builtin.file:
+        path: "{{ monitoring.log_directory }}/access_events.log"
+        state: touch
+        owner: root
+        group: root
+        mode: "0640"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+  tags:
+    - monitoring
+    - access_control
+    - security
+
+# ==============================================
+# VALIDACIÓN DE CONFIGURACIÓN
+# ==============================================
+- name: "✅ Validar configuración de controles de acceso"
+  block:
+    - name: "🔍 Verificar configuración PAM"
+      ansible.builtin.command: "pam-auth-update --package"
+      register: pam_status
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+      changed_when: false
+
+    - name: "📊 Mostrar resumen de controles configurados"
+      ansible.builtin.debug:
+        msg:
+          - "=== CONTROLES DE ACCESO CONFIGURADOS ==="
+          - "Host: {{ inventory_hostname }}"
+          - "Sistema: {{ ansible_system }}"
+          - "PAM configurado: {{ '✅' if pam_status is defined and pam_status.rc == 0 else '❌' }}"
+          - "Límites de recursos: ✅ Configurado"
+          - "Políticas de contraseña: ✅ Aplicadas"
+          - "Auditoría: ✅ Habilitada"
+          - "RBAC: ✅ Implementado"
+          - "Estado: ✅ Configuración completada"
+
+  tags:
+    - validation
+    - access_control

@@ -1,0 +1,62 @@
+# Configuración de límites de recursos del sistema
+# Generado por Ansible - {{ ansible_managed_banner }}
+
+# ==============================================
+# LÍMITES GLOBALES DEL SISTEMA
+# ==============================================
+*               soft    nofile          65536
+*               hard    nofile          65536
+*               soft    nproc           32768
+*               hard    nproc           32768
+*               soft    stack           8192
+*               hard    stack           8192
+
+# ==============================================
+# LÍMITES POR GRUPOS DE USUARIOS
+# ==============================================
+{% if academic_groups is defined %}
+# Grupo estudiantes
+@students       soft    maxlogins       3
+@students       hard    maxlogins       5
+@students       soft    cpu             60
+@students       hard    cpu             120
+@students       soft    nproc           1024
+@students       hard    nproc           2048
+
+# Grupo prácticas
+@practice       soft    maxlogins       2
+@practice       hard    maxlogins       3
+@practice       soft    cpu             30
+@practice       hard    cpu             60
+@practice       soft    nproc           512
+@practice       hard    nproc           1024
+
+# Administradores académicos
+@academic_admin soft    maxlogins       10
+@academic_admin hard    maxlogins       20
+@academic_admin soft    nproc           4096
+@academic_admin hard    nproc           8192
+{% endif %}
+
+# ==============================================
+# LÍMITES DE MEMORIA Y CORE DUMPS
+# ==============================================
+*               soft    core            0
+*               hard    core            0
+*               soft    rss             512000
+*               hard    rss             1024000
+
+# ==============================================
+# LÍMITES DE TIEMPO DE SESIÓN
+# ==============================================
+{% if security is defined %}
+*               soft    priority        {{ security.session_timeout | default(1800) }}
+{% endif %}
+
+# ==============================================
+# CONFIGURACIÓN ESPECIAL PARA ROOT
+# ==============================================
+root            soft    nofile          unlimited
+root            hard    nofile          unlimited
+root            soft    nproc           unlimited
+root            hard    nproc           unlimited

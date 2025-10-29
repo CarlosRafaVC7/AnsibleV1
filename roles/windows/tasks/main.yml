@@ -4,6 +4,7 @@
 - import_tasks: services.yml
 - import_tasks: jobs.yml
 - import_tasks: storage.yml
+- import_tasks: network.yml
 
 - name: Crear variable con fecha/hora actual
   set_fact:

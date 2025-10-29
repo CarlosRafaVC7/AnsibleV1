@@ -1,0 +1,309 @@
+---
+# Tasks para mostrar información detallada de VM, NIC y dispositivos
+# Dumps completos para revisión y troubleshooting
+
+- name: "📊 INFORMACIÓN COMPLETA DE VM Y DISPOSITIVOS"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "📊 RECOPILANDO INFORMACIÓN COMPLETA DEL SISTEMA"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_system }}"
+      - "Fecha: {{ ansible_date_time.date }}"
+      - "Hora: {{ ansible_date_time.time }}"
+      - "=================================================="
+
+# ==============================================
+# INFORMACIÓN GENERAL DEL SISTEMA
+# ==============================================
+- name: "🖥️ Mostrar información general del sistema"
+  ansible.builtin.debug:
+    msg:
+      - "=== INFORMACIÓN GENERAL DEL SISTEMA ==="
+      - "Hostname: {{ ansible_hostname }}"
+      - "FQDN: {{ ansible_fqdn }}"
+      - "Sistema Operativo: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "Kernel: {{ ansible_kernel }}"
+      - "Arquitectura: {{ ansible_architecture }}"
+      - "Fecha de Boot: {{ ansible_boot_time }}"
+      - "Uptime: {{ ansible_uptime_seconds }} segundos"
+      - "Zona Horaria: {{ ansible_date_time.tz }}"
+      - "Usuario Ansible: {{ ansible_user_id }}"
+      - "Directorio Home: {{ ansible_user_dir }}"
+
+# ==============================================
+# INFORMACIÓN DE HARDWARE Y VM
+# ==============================================
+- name: "🔧 Mostrar información de hardware"
+  ansible.builtin.debug:
+    msg:
+      - "=== INFORMACIÓN DE HARDWARE ==="
+      - "Procesador: {{ ansible_processor[2] | default('Unknown') }}"
+      - "Núcleos CPU: {{ ansible_processor_cores }}"
+      - "Threads CPU: {{ ansible_processor_threads_per_core }}"
+      - "vCPUs Totales: {{ ansible_processor_vcpus }}"
+      - "Memoria Total: {{ (ansible_memtotal_mb / 1024) | round(2) }} GB"
+      - "Memoria Libre: {{ (ansible_memfree_mb / 1024) | round(2) }} GB"
+      - "Swap Total: {{ (ansible_swaptotal_mb / 1024) | round(2) }} GB"
+      - "Virtualización: {{ ansible_virtualization_type | default('Physical') }}"
+      - "Hypervisor: {{ ansible_virtualization_role | default('N/A') }}"
+
+- name: "💾 Mostrar información de discos"
+  ansible.builtin.debug:
+    msg:
+      - "=== INFORMACIÓN DE ALMACENAMIENTO ==="
+      - "{% for mount in ansible_mounts %}"
+      - "Montaje: {{ mount.mount }}"
+      - "  Dispositivo: {{ mount.device }}"
+      - "  Tipo FS: {{ mount.fstype }}"
+      - "  Tamaño: {{ (mount.size_total / 1024 / 1024 / 1024) | round(2) }} GB"
+      - "  Disponible: {{ (mount.size_available / 1024 / 1024 / 1024) | round(2) }} GB"
+      - "  Uso: {{ ((mount.size_total - mount.size_available) / mount.size_total * 100) | round(1) }}%"
+      - "{% endfor %}"
+
+# ==============================================
+# INFORMACIÓN DETALLADA DE INTERFACES DE RED
+# ==============================================
+- name: "🌐 Mostrar información detallada de red"
+  ansible.builtin.debug:
+    msg:
+      - "=== INFORMACIÓN DE RED ==="
+      - "Gateway por defecto: {{ ansible_default_ipv4.gateway | default('N/A') }}"
+      - "Interface por defecto: {{ ansible_default_ipv4.interface | default('N/A') }}"
+      - "DNS Servers: {{ ansible_dns.nameservers | join(', ') }}"
+      - "Dominio DNS: {{ ansible_dns.search | join(', ') if ansible_dns.search is defined else 'N/A' }}"
+      - ""
+      - "=== INTERFACES DE RED DETALLADAS ==="
+
+- name: "📡 Información detallada por interface"
+  ansible.builtin.debug:
+    msg:
+      - "Interface: {{ item }}"
+      - "  Estado: {{ 'UP' if ansible_facts[item]['active'] else 'DOWN' }}"
+      - "  Tipo: {{ ansible_facts[item]['type'] | default('Unknown') }}"
+      - "  MAC Address: {{ ansible_facts[item]['macaddress'] | default('N/A') }}"
+      - "  MTU: {{ ansible_facts[item]['mtu'] | default('N/A') }}"
+      - "  {% if ansible_facts[item]['ipv4'] is defined %}"
+      - "  IPv4: {{ ansible_facts[item]['ipv4']['address'] }}/{{ ansible_facts[item]['ipv4']['netmask'] }}"
+      - "  Red IPv4: {{ ansible_facts[item]['ipv4']['network'] }}"
+      - "  Broadcast: {{ ansible_facts[item]['ipv4']['broadcast'] | default('N/A') }}"
+      - "  {% endif %}"
+      - "  {% if ansible_facts[item]['ipv6'] is defined %}"
+      - "  IPv6: {{ ansible_facts[item]['ipv6'] | map(attribute='address') | join(', ') }}"
+      - "  {% endif %}"
+      - "  Módulo: {{ ansible_facts[item]['module'] | default('N/A') }}"
+      - "  Speed: {{ ansible_facts[item]['speed'] | default('N/A') }}"
+      - "  Duplex: {{ ansible_facts[item]['duplex'] | default('N/A') }}"
+      - "  ---"
+  loop: "{{ ansible_interfaces }}"
+  when: item != 'lo'
+
+# ==============================================
+# INFORMACIÓN DE CONECTIVIDAD Y ROUTING
+# ==============================================
+- name: "🛤️ Obtener información de routing (Linux)"
+  ansible.builtin.command: ip route show
+  register: routing_info
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  changed_when: false
+
+- name: "📊 Mostrar tabla de routing"
+  ansible.builtin.debug:
+    msg:
+      - "=== TABLA DE ROUTING ==="
+      - "{{ routing_info.stdout_lines }}"
+  when: routing_info is defined
+
+- name: "🔍 Obtener información ARP (Linux)"
+  ansible.builtin.command: arp -a
+  register: arp_info
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  changed_when: false
+
+- name: "📋 Mostrar tabla ARP"
+  ansible.builtin.debug:
+    msg:
+      - "=== TABLA ARP ==="
+      - "{{ arp_info.stdout_lines }}"
+  when: arp_info is defined
+
+# ==============================================
+# INFORMACIÓN DE SERVICIOS Y PROCESOS
+# ==============================================
+- name: "⚙️ Obtener información de servicios"
+  ansible.builtin.service_facts:
+
+- name: "🔧 Mostrar servicios críticos"
+  ansible.builtin.debug:
+    msg:
+      - "=== SERVICIOS CRÍTICOS ==="
+      - "SSH: {{ ansible_facts.services['ssh.service'].state | default('N/A') }}"
+      - "Firewall (UFW): {{ ansible_facts.services['ufw.service'].state | default('N/A') }}"
+      - "Cron: {{ ansible_facts.services['cron.service'].state | default('N/A') }}"
+      - "NetworkManager: {{ ansible_facts.services['NetworkManager.service'].state | default('N/A') }}"
+      - "Fail2ban: {{ ansible_facts.services['fail2ban.service'].state | default('N/A') }}"
+      - "MySQL: {{ ansible_facts.services['mysql.service'].state | default('N/A') }}"
+      - "Apache2: {{ ansible_facts.services['apache2.service'].state | default('N/A') }}"
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+- name: "💻 Obtener información de procesos top"
+  ansible.builtin.shell: ps aux --sort=-%cpu | head -10
+  register: top_processes
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  changed_when: false
+
+- name: "📊 Mostrar procesos que más CPU consumen"
+  ansible.builtin.debug:
+    msg:
+      - "=== TOP 10 PROCESOS POR CPU ==="
+      - "{{ top_processes.stdout_lines }}"
+  when: top_processes is defined
+
+# ==============================================
+# INFORMACIÓN DE SEGURIDAD
+# ==============================================
+- name: "🔒 Obtener información de puertos abiertos"
+  ansible.builtin.shell: ss -tuln | grep LISTEN
+  register: open_ports
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  changed_when: false
+
+- name: "🚪 Mostrar puertos abiertos"
+  ansible.builtin.debug:
+    msg:
+      - "=== PUERTOS ABIERTOS ==="
+      - "{{ open_ports.stdout_lines }}"
+  when: open_ports is defined
+
+- name: "👤 Obtener usuarios logueados"
+  ansible.builtin.command: who
+  register: logged_users
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  changed_when: false
+
+- name: "👥 Mostrar usuarios activos"
+  ansible.builtin.debug:
+    msg:
+      - "=== USUARIOS ACTIVOS ==="
+      - "{{ logged_users.stdout_lines if logged_users.stdout_lines else ['Ningún usuario logueado'] }}"
+  when: logged_users is defined
+
+# ==============================================
+# INFORMACIÓN ESPECÍFICA DE WINDOWS
+# ==============================================
+- name: "🪟 Información específica de Windows"
+  block:
+    - name: "Obtener información de adaptadores de red Windows"
+      ansible.windows.win_shell: |
+        Get-NetAdapter | Select-Object Name,InterfaceDescription,Status,LinkSpeed,MacAddress,DriverVersion | Format-Table -AutoSize
+      register: win_network_info
+
+    - name: "Mostrar adaptadores de red Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=== ADAPTADORES DE RED WINDOWS ==="
+          - "{{ win_network_info.stdout_lines }}"
+
+    - name: "Obtener información de servicios Windows"
+      ansible.windows.win_shell: |
+        Get-Service | Where-Object {$_.Status -eq 'Running' -and $_.Name -match 'Win|Network|Security'} | Select-Object Name,Status,StartType | Format-Table -AutoSize
+      register: win_services_info
+
+    - name: "Mostrar servicios críticos Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=== SERVICIOS CRÍTICOS WINDOWS ==="
+          - "{{ win_services_info.stdout_lines }}"
+
+    - name: "Obtener información de firewall Windows"
+      ansible.windows.win_shell: |
+        Get-NetFirewallProfile | Select-Object Name,Enabled,DefaultInboundAction,DefaultOutboundAction | Format-Table -AutoSize
+      register: win_firewall_info
+
+    - name: "Mostrar configuración de firewall Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=== CONFIGURACIÓN FIREWALL WINDOWS ==="
+          - "{{ win_firewall_info.stdout_lines }}"
+
+  when: ansible_os_family == "Windows"
+  tags:
+    - windows
+    - info
+
+# ==============================================
+# INFORMACIÓN DE CONFIGURACIÓN ANSIBLE
+# ==============================================
+- name: "⚙️ Mostrar información de configuración Ansible"
+  ansible.builtin.debug:
+    msg:
+      - "=== CONFIGURACIÓN ANSIBLE ==="
+      - "Versión Ansible: {{ ansible_version.full }}"
+      - "Python Interpreter: {{ ansible_python.executable }}"
+      - "Versión Python: {{ ansible_python.version.readable }}"
+      - "Conexión: {{ ansible_connection }}"
+      - "Usuario remoto: {{ ansible_user }}"
+      - "Become method: {{ ansible_become_method | default('N/A') }}"
+      - "Grupos del host: {{ group_names | join(', ') }}"
+
+# ==============================================
+# DUMP COMPLETO DE VARIABLES
+# ==============================================
+- name: "📋 Crear dump completo de variables del sistema"
+  ansible.builtin.copy:
+    content: |
+      # DUMP COMPLETO DE VARIABLES - {{ inventory_hostname }}
+      # Generado el {{ ansible_date_time.date }} a las {{ ansible_date_time.time }}
+      
+      ==============================================
+      INFORMACIÓN GENERAL
+      ==============================================
+      {{ ansible_facts | to_nice_yaml }}
+      
+      ==============================================
+      VARIABLES DE GRUPO
+      ==============================================
+      Grupos: {{ group_names | join(', ') }}
+      
+      ==============================================
+      VARIABLES DE HOST ESPECÍFICAS
+      ==============================================
+      Inventario: {{ inventory_hostname }}
+      
+    dest: "{{ monitoring.log_directory | default('/tmp') }}/{{ inventory_hostname }}_system_dump_{{ ansible_date_time.epoch }}.txt"
+    mode: "0640"
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+- name: "📁 Mostrar ubicación del dump"
+  ansible.builtin.debug:
+    msg:
+      - "=== DUMP DE SISTEMA CREADO ==="
+      - "Archivo: {{ monitoring.log_directory | default('/tmp') }}/{{ inventory_hostname }}_system_dump_{{ ansible_date_time.epoch }}.txt"
+      - "Contiene: Variables completas del sistema, configuración de red, hardware"
+      - "Uso: Para troubleshooting y documentación del sistema"
+
+# ==============================================
+# RESUMEN FINAL
+# ==============================================
+- name: "✅ Resumen final de información recopilada"
+  ansible.builtin.debug:
+    msg:
+      - "=================================================="
+      - "✅ RECOPILACIÓN DE INFORMACIÓN COMPLETADA"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "IP Principal: {{ ansible_default_ipv4.address | default('N/A') }}"
+      - "Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "CPU: {{ ansible_processor_vcpus }} vCPUs"
+      - "RAM: {{ (ansible_memtotal_mb / 1024) | round(2) }} GB"
+      - "Interfaces de red: {{ ansible_interfaces | length }}"
+      - "Servicios monitoreados: ✅"
+      - "Dump creado: ✅"
+      - "Estado general: ✅ SISTEMA OPERATIVO"
+      - "=================================================="
+
+  tags:
+    - summary
+    - info
+    - validation

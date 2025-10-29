@@ -1,0 +1,68 @@
+---
+# Políticas avanzadas de seguridad
+# Configuración específica según entorno ESXi y laboratorio
+
+- name: Crear directorio de configuración de seguridad
+  ansible.builtin.file:
+    path: "{{ security_config_dir }}"
+    state: directory
+    mode: '0755'
+  vars:
+    security_config_dir: "{{ '/etc/ansible-security' if ansible_os_family != 'Windows' else 'C:\\ansible-security' }}"
+
+- name: Configurar políticas específicas del laboratorio académico
+  ansible.builtin.include_tasks: academic_lab_policies.yml
+  when: inventory_hostname in groups['academico'] | default([])
+
+- name: Configurar políticas específicas del laboratorio gamer
+  ansible.builtin.include_tasks: gamer_lab_policies.yml
+  when: inventory_hostname in groups['gamer'] | default([])
+
+- name: Configurar integración con políticas ESXi
+  ansible.builtin.template:
+    src: esxi_integration.conf.j2
+    dest: "{{ security_config_dir }}/esxi_integration.conf"
+    mode: '0644'
+  vars:
+    security_config_dir: "{{ '/etc/ansible-security' if ansible_os_family != 'Windows' else 'C:\\ansible-security' }}"
+
+- name: Configurar políticas de backup de seguridad
+  ansible.builtin.cron:
+    name: "Security configuration backup"
+    minute: "0"
+    hour: "3"
+    job: "tar -czf {{ security_config_dir }}/backup/security-$(date +%Y%m%d).tar.gz {{ security_config_dir }}/ /etc/iptables/ 2>/dev/null"
+    user: root
+  when: ansible_os_family == "Debian"
+
+- name: Configurar alertas de seguridad
+  ansible.builtin.template:
+    src: security_alerts.sh.j2
+    dest: "{{ security_config_dir }}/security_alerts.sh"
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Programar alertas de seguridad
+  ansible.builtin.cron:
+    name: "Security alerts check"
+    minute: "*/30"
+    job: "{{ security_config_dir }}/security_alerts.sh"
+    user: root
+  when: ansible_os_family == "Debian"
+
+- name: Configurar matriz de acceso entre laboratorios
+  ansible.builtin.template:
+    src: lab_access_matrix.conf.j2
+    dest: "{{ security_config_dir }}/lab_access_matrix.conf"
+    mode: '0644'
+
+- name: Aplicar restricciones de red inter-laboratorio
+  ansible.builtin.include_tasks: inter_lab_restrictions.yml
+
+- name: Configurar logging centralizado de seguridad
+  ansible.builtin.template:
+    src: security_logging.conf.j2
+    dest: "{{ '/etc/rsyslog.d/50-security.conf' if ansible_os_family == 'Debian' else security_config_dir + '\\security_logging.conf' }}"
+  notify: 
+    - restart rsyslog
+    - restart windows event log

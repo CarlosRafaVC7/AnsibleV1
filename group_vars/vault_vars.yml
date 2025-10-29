@@ -1,0 +1,97 @@
+---
+# Archivo de credenciales seguras - DEBE SER ENCRIPTADO CON ANSIBLE VAULT
+# Para encriptar: ansible-vault encrypt vault_vars.yml
+# Para editar: ansible-vault edit vault_vars.yml
+
+# ==============================================
+# CREDENCIALES DE ADMINISTRADORES
+# ==============================================
+vault_admin_username: "labadmin"
+vault_admin_password: "SecureAdmin2024!"
+vault_admin_email: "admin@lab.local"
+
+# ==============================================
+# CREDENCIALES DE USUARIOS DE LABORATORIO
+# ==============================================
+# Usuario académico
+vault_student_username: "lab_student"
+vault_student_password: "Student2024!Secure"
+vault_student_email: "student@academico.lab.local"
+
+# Usuario gamer
+vault_gamer_username: "gameruser"
+vault_gamer_password: "Gamer2024!Secure"
+vault_gamer_email: "gamer@gaming.lab.local"
+
+# ==============================================
+# CREDENCIALES DE BASE DE DATOS
+# ==============================================
+vault_mysql_root_password: "MySQLRoot2024!Secure"
+vault_mysql_app_password: "MySQLApp2024!Secure"
+vault_postgresql_password: "PostgreSQL2024!Secure"
+
+# Usuarios de BD
+vault_db_admin_user: "dbadmin"
+vault_db_app_user: "appuser"
+
+# ==============================================
+# CREDENCIALES DE ESXI
+# ==============================================
+vault_esxi_username: "root"
+vault_esxi_password: "ESXi2024!Secure"
+vault_esxi_api_user: "ansible_api"
+vault_esxi_api_password: "ESXiAPI2024!Secure"
+
+# ==============================================
+# CLAVES API Y TOKENS
+# ==============================================
+vault_api_key: "ansible-lab-api-key-2024-secure"
+vault_jwt_secret: "jwt-secret-key-2024-very-secure"
+vault_encryption_key: "encryption-key-2024-ultra-secure"
+
+# ==============================================
+# CREDENCIALES DE SERVICIOS
+# ==============================================
+# Servicio de backup
+vault_backup_encryption_key: "backup-encryption-2024-secure"
+vault_backup_remote_user: "backupuser"
+vault_backup_remote_password: "Backup2024!Secure"
+
+# Servicio de monitoreo
+vault_monitoring_api_key: "monitoring-api-2024-secure"
+vault_alerting_webhook: "https://hooks.slack.com/services/secure-webhook"
+
+# Certificados SSL/TLS
+vault_ssl_private_key: |
+  -----BEGIN PRIVATE KEY-----
+  # PLACEHOLDER - Reemplazar con clave real
+  -----END PRIVATE KEY-----
+
+vault_ssl_certificate: |
+  -----BEGIN CERTIFICATE-----
+  # PLACEHOLDER - Reemplazar con certificado real
+  -----END CERTIFICATE-----
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD AVANZADA
+# ==============================================
+vault_security_salt: "lab-security-salt-2024"
+vault_session_secret: "session-secret-2024-secure"
+vault_csrf_token: "csrf-token-2024-secure"
+
+# ==============================================
+# INSTRUCCIONES DE USO
+# ==============================================
+# 1. Encriptar este archivo:
+#    ansible-vault encrypt group_vars/vault_vars.yml
+# 
+# 2. Usar en playbooks con:
+#    ansible-playbook playbook.yml --ask-vault-pass
+#
+# 3. O con archivo de contraseña:
+#    echo "vault_password" > .vault_pass
+#    chmod 600 .vault_pass
+#    ansible-playbook playbook.yml --vault-password-file .vault_pass
+#
+# 4. Para editar variables:
+#    ansible-vault edit group_vars/vault_vars.yml

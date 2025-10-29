@@ -1,0 +1,23 @@
+---
+# Handlers para el rol Windows
+
+- name: restart_winrm
+  ansible.windows.win_service:
+    name: WinRM
+    state: restarted
+
+- name: restart_task_scheduler
+  ansible.windows.win_service:
+    name: Schedule
+    state: restarted
+
+- name: restart_windows_time
+  ansible.windows.win_service:
+    name: W32Time
+    state: restarted
+
+- name: reboot_windows
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+    connect_timeout: 60
+    test_command: whoami

@@ -1,0 +1,167 @@
+---
+# Configuración de seguridad para sistemas Linux/Ubuntu
+# Incluye iptables, fail2ban, SSH hardening
+
+- name: Instalar paquetes de seguridad esenciales
+  ansible.builtin.apt:
+    name:
+      - iptables
+      - iptables-persistent
+      - fail2ban
+      - ufw
+      - logwatch
+      - rkhunter
+      - chkrootkit
+      - aide
+    state: present
+    update_cache: yes
+
+- name: Configurar reglas iptables básicas
+  ansible.builtin.iptables:
+    chain: "{{ item.chain }}"
+    rule: "{{ item.rule }}"
+    jump: "{{ item.jump }}"
+    comment: "{{ item.comment }}"
+  loop:
+    # Políticas por defecto
+    - { chain: "INPUT", rule: "-m state --state ESTABLISHED,RELATED", jump: "ACCEPT", comment: "Permitir conexiones establecidas" }
+    - { chain: "INPUT", rule: "-i lo", jump: "ACCEPT", comment: "Permitir loopback" }
+    
+    # SSH seguro (solo desde redes permitidas)
+    - { chain: "INPUT", rule: "-p tcp --dport 22 -s {{ esxi_network | default('168.121.48.0/24') }}", jump: "ACCEPT", comment: "SSH desde ESXi network" }
+    - { chain: "INPUT", rule: "-p tcp --dport 22 -s {{ local_network | default('192.168.1.0/24') }}", jump: "ACCEPT", comment: "SSH desde red local" }
+    
+    # Servicios específicos del laboratorio académico
+    - { chain: "INPUT", rule: "-p tcp --dport 80", jump: "ACCEPT", comment: "HTTP para nginx" }
+    - { chain: "INPUT", rule: "-p tcp --dport 443", jump: "ACCEPT", comment: "HTTPS para nginx" }
+    - { chain: "INPUT", rule: "-p tcp --dport 2376", jump: "ACCEPT", comment: "Docker daemon seguro" }
+    
+    # ICMP limitado
+    - { chain: "INPUT", rule: "-p icmp --icmp-type echo-request -m limit --limit 1/s", jump: "ACCEPT", comment: "Ping limitado" }
+    
+    # Protección contra ataques
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL NONE", jump: "DROP", comment: "Drop NULL packets" }
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL ALL", jump: "DROP", comment: "Drop XMAS packets" }
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL FIN,URG,PSH", jump: "DROP", comment: "Drop stealth scans" }
+
+- name: Configurar política por defecto DROP
+  ansible.builtin.iptables:
+    chain: "{{ item }}"
+    policy: DROP
+  loop:
+    - INPUT
+    - FORWARD
+
+- name: Configurar política ACCEPT para OUTPUT
+  ansible.builtin.iptables:
+    chain: OUTPUT
+    policy: ACCEPT
+
+- name: Guardar reglas iptables
+  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+  
+- name: Configurar fail2ban para SSH
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    backup: yes
+  notify: restart fail2ban
+
+- name: Configurar SSH hardening
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes
+  loop:
+    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
+    - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+    - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+    - { regexp: "^#?Protocol", line: "Protocol 2" }
+    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 3" }
+    - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval 300" }
+    - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax 2" }
+    - { regexp: "^#?AllowUsers", line: "AllowUsers ansible lab_student" }
+  notify: restart ssh
+
+- name: Configurar límites de sistema
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    line: "{{ item }}"
+    create: yes
+  loop:
+    - "* soft nofile 65536"
+    - "* hard nofile 65536"
+    - "* soft nproc 32768"
+    - "* hard nproc 32768"
+
+- name: Habilitar auditoría del kernel
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_CMDLINE_LINUX='
+    line: 'GRUB_CMDLINE_LINUX="audit=1"'
+    backup: yes
+  notify: update grub
+
+- name: Configurar logrotate para logs de seguridad
+  ansible.builtin.template:
+    src: security-logs.j2
+    dest: /etc/logrotate.d/security-logs
+
+- name: Instalar y configurar AIDE (detección de intrusiones)
+  ansible.builtin.shell: |
+    aide --init
+    cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+  args:
+    creates: /var/lib/aide/aide.db
+
+- name: Crear cron para verificación AIDE diaria
+  ansible.builtin.cron:
+    name: "AIDE integrity check"
+    minute: "0"
+    hour: "2"
+    job: "/usr/bin/aide --check | mail -s 'AIDE Report - {{ inventory_hostname }}' root"
+    user: root
+
+- name: Deshabilitar servicios innecesarios
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - avahi-daemon
+    - cups
+    - bluetooth
+  ignore_errors: yes
+
+- name: Configurar sysctl para seguridad de red
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    # Protección contra IP spoofing
+    - { name: "net.ipv4.conf.all.rp_filter", value: "1" }
+    - { name: "net.ipv4.conf.default.rp_filter", value: "1" }
+    
+    # Deshabilitar IP forwarding si no es router
+    - { name: "net.ipv4.ip_forward", value: "0" }
+    - { name: "net.ipv6.conf.all.forwarding", value: "0" }
+    
+    # Protección contra ICMP redirects
+    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    - { name: "net.ipv6.conf.all.accept_redirects", value: "0" }
+    
+    # Protección contra source routing
+    - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
+    
+    # Protección SYN flood
+    - { name: "net.ipv4.tcp_syncookies", value: "1" }
+    - { name: "net.ipv4.tcp_max_syn_backlog", value: "2048" }
+    
+    # Protección contra ping of death
+    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }

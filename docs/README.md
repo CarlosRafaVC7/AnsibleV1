@@ -1,21 +1,71 @@
-# SO-Ansible (Hybrid) - Documentación Completa
+# 🧠 SO-Ansible (Hybrid) — Documentación Completa (v1.1)
 
 ## Descripción del Proyecto
 
-SO-Ansible (Hybrid) es un proyecto de automatización para la administración de laboratorios virtuales híbridos que soporta:
+SO-Ansible (Hybrid) es un proyecto de automatización orientado a la **administración integral de laboratorios virtuales híbridos** desplegados tanto en entornos on-premise (ESXi/VirtualBox) como en entornos locales.
 
-- **Laboratorio Académico**: Linux Ubuntu/Mint (VirtualBox/ESXi)
-- **Laboratorio Gamer**: Windows 11 Pro (VirtualBox/ESXi)  
-- **VM de Testing**: macOS Mojave (VirtualBox)
+Este proyecto aplica principios de **Infraestructura como Código (IaC)** y **Configuración Automatizada** en dos etapas claramente diferenciadas:
+
+**Etapa 1 — Infraestructura:**
+- Creación y despliegue de máquinas virtuales (VMs) base en VMware ESXi y VirtualBox
+- Incluye definición de hardware, red y asignación de ISOs de instalación
+
+**Etapa 2 — Configuración:**
+- Una vez instalados los sistemas operativos en las VMs, Ansible se conecta a cada uno para realizar la automatización completa (configuración de red, usuarios, permisos, tareas, y monitoreo)
+
+## Arquitectura General
+
+| Componente | Descripción |
+|------------|-------------|
+| **Nodo de Control** | Ansible ejecutándose en WSL o Ubuntu local |
+| **Infraestructura Virtual** | VMs en ESXi (remoto) o VirtualBox (local) |
+| **Laboratorio Académico** | Linux Ubuntu / Linux Mint |
+| **Laboratorio Gamer** | Windows 11 Pro |
+| **VM de Testing** | macOS Mojave (solo en VirtualBox local) |
 
 ### Características Principales
 
-✅ **Infraestructura como Código**: Creación automática de VMs en VMware ESXi y VirtualBox
-✅ **Soporte IPv6**: Configuración preferencial IPv6 con fallback IPv4
-✅ **Multi-Plataforma**: Linux, Windows y macOS
-✅ **Seguridad**: Uso de claves SSH, WinRM configurado correctamente
-✅ **Monitoreo**: Jobs automáticos de sistema y recursos
-✅ **Idempotencia**: Playbooks ejecutables múltiples veces
+✅ **Infraestructura como Código (IaC)** – VMs reproducibles en ESXi/VirtualBox  
+✅ **Automatización por Etapas** – Separación entre despliegue y configuración  
+✅ **Soporte IPv6 nativo** con fallback IPv4  
+✅ **Multi-Plataforma**: Linux, Windows, macOS  
+✅ **Seguridad**: SSH y WinRM  
+✅ **Monitoreo activo** de CPU, memoria y disco  
+✅ **Idempotencia garantizada**: los playbooks pueden re-ejecutarse sin efectos colaterales
+
+## Estructura del Proyecto
+
+```
+AnsibleV1/
+├── ansible.cfg                 # Configuración principal
+├── requirements.yml            # Collections necesarias
+├── inventory/
+│   └── hosts.ini              # Inventario con soporte IPv6
+├── group_vars/                # Variables por grupo
+│   ├── all.yml
+│   ├── academico.yml
+│   ├── gamer.yml
+│   └── macos_test.yml
+├── host_vars/                 # Variables específicas por host
+├── playbooks/
+│   ├── main.yml              # Playbook principal
+│   └── infrastructure/       # Creación de VMs
+│       ├── esxi_create.yml
+│       └── virtualbox_create.yml
+├── roles/
+│   ├── infrastructure/       # Gestión de infraestructura
+│   ├── linux/               # Administración Linux
+│   ├── windows/             # Administración Windows
+│   └── macos/               # Administración macOS
+├── templates/               # Templates de configuración
+│   ├── netplan_config.yml.j2
+│   └── windows_ipv6_config.ps1.j2
+├── tests/                   # Playbooks de validación
+│   ├── validate_connectivity.yml
+│   └── validate_configuration.yml
+└── docs/                    # Documentación
+    └── README.md
+```
 
 ## Estructura del Proyecto
 
@@ -87,52 +137,54 @@ esxi_pass: "TU_PASSWORD"  # TODO: Mover a ansible-vault
 2001:db8:1::101 ansible_user=Administrador ansible_password='TU_PASSWORD' ansible_connection=winrm
 ```
 
-## Flujo de Uso
+## 🚀 Flujo Operativo (Etapas)
 
-### Opción A: Infraestructura ESXi
+### 🏗️ Etapa 1 — Infraestructura (Creación de VMs)
 
+**Objetivo:** crear y levantar las VMs base en ESXi o VirtualBox con sus parámetros definidos.
+
+#### Opción A: ESXi
 ```bash
-# 1. Crear VMs en ESXi
+# 1. Crear VMs vacías en ESXi
 ansible-playbook playbooks/infrastructure/esxi_create.yml
 
-# 2. Completar instalación de OS manualmente en vSphere Client
+# 2. Instalar manualmente los SOs en vSphere Client (Ubuntu, Mint, Win11)
 
-# 3. Configurar red IPv6 en cada VM
-
-# 4. Actualizar inventory/hosts.ini con IPs reales
-
-# 5. Validar conectividad
-ansible-playbook tests/validate_connectivity.yml
-
-# 6. Configurar VMs automáticamente
-ansible-playbook playbooks/main.yml
-
-# 7. Validar configuración final
-ansible-playbook tests/validate_configuration.yml
+# 3. Configurar IPs IPv6 en cada VM
+# 4. Actualizar inventory/hosts.ini con las IPs reales
 ```
 
-### Opción B: Infraestructura VirtualBox
-
+#### Opción B: VirtualBox (local)
 ```bash
 # 1. Crear VMs en VirtualBox
 ansible-playbook playbooks/infrastructure/virtualbox_create.yml
 
-# 2. Iniciar VMs desde VirtualBox Manager
+# 2. Iniciar desde VirtualBox Manager e instalar manualmente los SOs
 
-# 3. Completar instalación de OS
-
-# 4. Configurar red Host-Only con IPv6
-
-# 5. Actualizar inventory/hosts.ini
-
-# 6. Continuar con pasos 5-7 de la Opción A
+# 3. Configurar red Host-Only con IPv6
+# 4. Actualizar inventory/hosts.ini
 ```
 
-## Configuración de Red IPv6
+> 🧩 **En esta etapa Ansible solo crea la infraestructura, pero aún no entra a las VMs.**
+
+### ⚙️ Etapa 2 — Configuración (Automatización de SOs)
+
+**Objetivo:** aplicar la configuración automatizada en cada sistema operativo ya instalado.
+
+```bash
+# 1. Validar conectividad
+ansible-playbook tests/validate_connectivity.yml
+
+# 2. Configurar automáticamente los sistemas
+ansible-playbook playbooks/main.yml
+
+# 3. Validar la configuración final
+ansible-playbook tests/validate_configuration.yml
+```
+
+## 🌐 Configuración de Red IPv6
 
 ### Linux (Ubuntu/Mint)
-
-El proyecto genera automáticamente configuración netplan:
 
 ```yaml
 # /etc/netplan/01-ansible.yaml
@@ -142,21 +194,18 @@ network:
     ens33:
       addresses:
         - 2001:db8:1::100/64
-        - 192.168.18.28/24  # fallback
+        - 192.168.18.28/24
       gateway6: 2001:db8:1::1
       gateway4: 192.168.18.1
 ```
 
-Aplicar con:
 ```bash
 sudo netplan apply
 ```
 
 ### Windows
 
-Ejecutar script PowerShell generado:
 ```powershell
-# Configuración automática de IPv6
 New-NetIPAddress -InterfaceIndex X -IPAddress "2001:db8:1::101" -PrefixLength 64
 New-NetRoute -DestinationPrefix "::/0" -NextHop "2001:db8:1::1"
 ```
@@ -164,79 +213,81 @@ New-NetRoute -DestinationPrefix "::/0" -NextHop "2001:db8:1::1"
 ### macOS
 
 ```bash
-# Configuración manual
 sudo networksetup -setv6manual "Wi-Fi" 2001:db8:1::102 64 2001:db8:1::1
 ```
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
-### Problemas Comunes
-
-**SSH no funciona (Linux/macOS):**
+### Conectividad SSH (Linux/macOS)
 ```bash
-# Verificar servicio
 sudo systemctl status ssh
-sudo systemctl start ssh
-
-# Verificar puerto
 sudo ufw allow 22
-
-# Test de conectividad
 ansible academico -m ping
 ```
 
-**WinRM no funciona (Windows):**
+### Conectividad WinRM (Windows)
 ```powershell
-# Configurar WinRM
 Enable-PSRemoting -Force
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*" -Force
-
-# Verificar listener
-winrm enumerate winrm/config/listener
-
-# Test de conectividad
 ansible gamer -m win_ping
 ```
 
-**Collections faltantes:**
+### Collections faltantes
 ```bash
-# Instalar collections requeridas
-ansible-galaxy collection install community.vmware
-ansible-galaxy collection install community.windows
-ansible-galaxy collection install community.crypto
+ansible-galaxy collection install community.vmware community.windows community.crypto
 ```
 
-### Comandos de Diagnóstico
-
+## 🧩 Comandos de Diagnóstico
 ```bash
-# Verificar conectividad general
 ansible all -m ping
-
-# Verificar facts de un host específico
-ansible -m setup HOSTNAME
-
-# Ejecutar command ad-hoc
 ansible academico -m command -a "ip addr show"
 ansible gamer -m ansible.windows.win_shell -a "ipconfig /all"
-
-# Ver variables de un host
-ansible-inventory --host HOSTNAME --yaml
+ansible-inventory --host academico --yaml
 ```
 
-## Archivos de Logs y Monitoreo
+## 📊 Monitoreo y Logs
 
-### Linux
-- Logs de monitoreo: `/var/log/ansible_monitor/`
-- Memoria: `/var/log/ansible_monitor/memoria.log`
-- Disco: `/var/log/ansible_monitor/df.log`
+| Sistema | Ruta de logs |
+|---------|--------------|
+| **Linux** | `/var/log/ansible_monitor/` |
+| **Windows** | `C:\ansible_monitor\` |
+| **macOS** | `/var/log/ansible_monitor/` |
 
-### Windows
-- Logs de monitoreo: `C:\ansible_monitor\`
-- CPU: `C:\ansible_monitor\cpu.txt`
+## Instalación y Configuración Inicial
 
-### macOS
-- Logs de monitoreo: `/var/log/ansible_monitor/`
-- Script monitor: `/Users/Shared/lab_shared/system_monitor.sh`
+### 1. Requisitos Previos
+
+```bash
+# En el nodo de control (WSL/Ubuntu)
+sudo apt update
+sudo apt install ansible python3-pip
+
+# Instalar collections
+ansible-galaxy collection install -r requirements.yml
+
+# Instalar dependencias Python
+pip3 install pyvmomi pywinrm
+```
+
+### 2. Configuración de Credenciales
+
+**Para ESXi (editar antes de usar):**
+```yaml
+# En playbooks/infrastructure/esxi_create.yml
+esxi_host: "TU_IP_ESXI:443"
+esxi_user: "root"
+esxi_pass: "TU_PASSWORD"  # TODO: Mover a ansible-vault
+```
+
+**Para VMs (actualizar IPs reales):**
+```ini
+# En inventory/hosts.ini
+[academico]
+2001:db8:1::100 ansible_user=mint ansible_ssh_private_key_file=~/.ssh/id_ed25519_ansible
+
+[gamer]
+2001:db8:1::101 ansible_user=Administrador ansible_password='TU_PASSWORD' ansible_connection=winrm
+```
 
 ## Próximos Pasos (TODO)
 
@@ -256,5 +307,5 @@ Para issues y preguntas:
 
 ---
 
-**Proyecto SO-Ansible (Hybrid) v1.0**
+**Proyecto SO-Ansible (Hybrid) v1.1**  
 Automatización de laboratorios virtuales multi-plataforma con soporte IPv6

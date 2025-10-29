@@ -1,0 +1,77 @@
+# Configuración de seguridad MySQL/MariaDB
+# Generado por Ansible - {{ ansible_managed_banner }}
+
+[mysqld]
+# ==============================================
+# CONFIGURACIÓN DE RED Y ACCESO
+# ==============================================
+bind-address = 127.0.0.1
+port = 3306
+skip-networking = 0
+skip-name-resolve = 1
+
+# ==============================================
+# CONFIGURACIÓN DE SEGURIDAD
+# ==============================================
+# Deshabilitar carga de archivos locales
+local-infile = 0
+
+# Configuración de usuarios y privilegios
+skip-show-database = 1
+safe-user-create = 1
+
+# Deshabilitar symbolic links
+symbolic-links = 0
+
+# ==============================================
+# CONFIGURACIÓN DE LOGGING Y AUDITORÍA
+# ==============================================
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+log_queries_not_using_indexes = 1
+
+# Logging de conexiones (solo para debugging - comentar en producción)
+general_log = 1
+general_log_file = /var/log/mysql/general.log
+
+# ==============================================
+# CONFIGURACIÓN DE PERFORMANCE Y LÍMITES
+# ==============================================
+max_connections = 50
+max_user_connections = 10
+max_connect_errors = 5
+
+# Timeouts de conexión
+connect_timeout = 10
+wait_timeout = 600
+interactive_timeout = 600
+
+# ==============================================
+# CONFIGURACIÓN DE SSL (OPCIONAL)
+# ==============================================
+# ssl-ca = /etc/mysql/ssl/ca-cert.pem
+# ssl-cert = /etc/mysql/ssl/server-cert.pem
+# ssl-key = /etc/mysql/ssl/server-key.pem
+
+# ==============================================
+# CONFIGURACIÓN DE BUFFER Y CACHE
+# ==============================================
+key_buffer_size = 16M
+max_allowed_packet = 16M
+thread_stack = 192K
+thread_cache_size = 8
+
+query_cache_limit = 1M
+query_cache_size = 16M
+
+# ==============================================
+# CONFIGURACIÓN DE INNODB
+# ==============================================
+innodb_file_per_table = 1
+innodb_buffer_pool_size = 128M
+innodb_log_file_size = 5M
+innodb_log_buffer_size = 8M
+innodb_flush_log_at_trx_commit = 1
+innodb_lock_wait_timeout = 50

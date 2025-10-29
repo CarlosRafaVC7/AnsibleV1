@@ -4,6 +4,7 @@
 - import_tasks: services.yml
 - import_tasks: jobs.yml
 - import_tasks: storage.yml
+- import_tasks: network.yml
 
 - name: Asegurar que el usuario 'lab_student' exista
   ansible.builtin.user:

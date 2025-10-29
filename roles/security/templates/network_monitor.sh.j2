@@ -1,0 +1,187 @@
+#!/bin/bash
+# Monitor de tráfico de red - Generado por Ansible
+# {{ ansible_managed_banner }}
+
+# ==============================================
+# CONFIGURACIÓN DE VARIABLES
+# ==============================================
+LOG_DIR="{{ monitoring.log_directory | default('/var/log/ansible_security') }}"
+NETWORK_LOG="$LOG_DIR/network_traffic.log"
+ALERT_LOG="$LOG_DIR/network_alerts.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Crear directorios si no existen
+mkdir -p "$LOG_DIR"
+
+# ==============================================
+# FUNCIONES DE MONITOREO
+# ==============================================
+log_network() {
+    echo "[$TIMESTAMP] $1" >> "$NETWORK_LOG"
+}
+
+send_network_alert() {
+    echo "[$TIMESTAMP] NETWORK ALERT: $1" >> "$ALERT_LOG"
+    {% if monitoring.alert_email is defined %}
+    echo "$1" | mail -s "Network Alert - {{ inventory_hostname }}" {{ monitoring.alert_email }}
+    {% endif %}
+}
+
+# ==============================================
+# VERIFICAR INTERFACES DE RED
+# ==============================================
+check_network_interfaces() {
+    log_network "=== Checking network interfaces ==="
+    
+    # Verificar estado de interfaces
+    for interface in $(ip link show | grep '^[0-9]' | cut -d: -f2 | tr -d ' '); do
+        if [ "$interface" != "lo" ]; then
+            STATE=$(ip link show "$interface" | grep -o "state [A-Z]*" | cut -d' ' -f2)
+            SPEED=$(ethtool "$interface" 2>/dev/null | grep "Speed:" | cut -d' ' -f2)
+            
+            log_network "Interface $interface: State=$STATE, Speed=${SPEED:-Unknown}"
+            
+            # Alertar si una interface está down
+            if [ "$STATE" = "DOWN" ]; then
+                send_network_alert "Interface $interface is DOWN"
+            fi
+        fi
+    done
+}
+
+# ==============================================
+# VERIFICAR TRÁFICO DE RED
+# ==============================================
+check_network_traffic() {
+    log_network "=== Checking network traffic ==="
+    
+    # Obtener estadísticas de tráfico
+    RX_BYTES=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$2} END {print sum}')
+    TX_BYTES=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$10} END {print sum}')
+    
+    log_network "Total RX: $RX_BYTES bytes, Total TX: $TX_BYTES bytes"
+    
+    # Verificar conexiones activas
+    ACTIVE_CONNECTIONS=$(ss -tun | grep ESTAB | wc -l)
+    log_network "Active connections: $ACTIVE_CONNECTIONS"
+    
+    # Alertar si hay demasiadas conexiones
+    if [ "$ACTIVE_CONNECTIONS" -gt 100 ]; then
+        send_network_alert "High number of active connections: $ACTIVE_CONNECTIONS"
+    fi
+}
+
+# ==============================================
+# VERIFICAR CONECTIVIDAD
+# ==============================================
+check_connectivity() {
+    log_network "=== Checking connectivity ==="
+    
+    # Verificar gateway
+    GATEWAY=$(ip route | grep default | awk '{print $3}' | head -1)
+    if [ -n "$GATEWAY" ]; then
+        if ping -c 1 -W 5 "$GATEWAY" >/dev/null 2>&1; then
+            log_network "Gateway $GATEWAY: OK"
+        else
+            send_network_alert "Gateway $GATEWAY is unreachable"
+        fi
+    fi
+    
+    # Verificar DNS
+    if nslookup google.com >/dev/null 2>&1; then
+        log_network "DNS resolution: OK"
+    else
+        send_network_alert "DNS resolution failed"
+    fi
+    
+    # Verificar conectividad externa
+    if ping -c 1 -W 10 8.8.8.8 >/dev/null 2>&1; then
+        log_network "External connectivity: OK"
+    else
+        send_network_alert "External connectivity failed"
+    fi
+}
+
+# ==============================================
+# VERIFICAR SEGURIDAD DE RED
+# ==============================================
+check_network_security() {
+    log_network "=== Checking network security ==="
+    
+    # Verificar puertos abiertos
+    OPEN_PORTS=$(ss -tuln | grep LISTEN | wc -l)
+    log_network "Open listening ports: $OPEN_PORTS"
+    
+    # Listar puertos críticos
+    CRITICAL_PORTS=$(ss -tuln | grep -E ":22|:80|:443|:3389|:5985" | wc -l)
+    log_network "Critical service ports open: $CRITICAL_PORTS"
+    
+    # Verificar conexiones sospechosas
+    EXTERNAL_CONNECTIONS=$(ss -tn | grep ESTAB | grep -v -E "127\.|192\.168\.|10\.|172\." | wc -l)
+    if [ "$EXTERNAL_CONNECTIONS" -gt 5 ]; then
+        send_network_alert "High number of external connections: $EXTERNAL_CONNECTIONS"
+    fi
+    log_network "External connections: $EXTERNAL_CONNECTIONS"
+}
+
+# ==============================================
+# VERIFICAR BANDWIDTH USAGE
+# ==============================================
+check_bandwidth() {
+    log_network "=== Checking bandwidth usage ==="
+    
+    # Usar iftop para obtener estadísticas de ancho de banda
+    if command -v iftop >/dev/null 2>&1; then
+        # Ejecutar iftop por 10 segundos y procesar salida
+        timeout 10s iftop -t -s 10 2>/dev/null | tail -3 | head -1 > /tmp/bandwidth_check
+        if [ -s /tmp/bandwidth_check ]; then
+            BANDWIDTH_INFO=$(cat /tmp/bandwidth_check)
+            log_network "Bandwidth usage: $BANDWIDTH_INFO"
+        fi
+        rm -f /tmp/bandwidth_check
+    fi
+}
+
+# ==============================================
+# VERIFICAR ARP TABLE
+# ==============================================
+check_arp_table() {
+    log_network "=== Checking ARP table ==="
+    
+    ARP_ENTRIES=$(arp -a | wc -l)
+    log_network "ARP table entries: $ARP_ENTRIES"
+    
+    # Verificar entradas ARP duplicadas (posible ARP spoofing)
+    DUPLICATE_ARPS=$(arp -a | awk '{print $4}' | sort | uniq -d | wc -l)
+    if [ "$DUPLICATE_ARPS" -gt 0 ]; then
+        send_network_alert "Possible ARP spoofing detected: $DUPLICATE_ARPS duplicate MAC addresses"
+        arp -a | awk '{print $4}' | sort | uniq -d >> "$ALERT_LOG"
+    fi
+}
+
+# ==============================================
+# FUNCIÓN PRINCIPAL
+# ==============================================
+main() {
+    log_network "=== Starting network monitoring ==="
+    
+    check_network_interfaces
+    check_network_traffic
+    check_connectivity
+    check_network_security
+    check_bandwidth
+    check_arp_table
+    
+    log_network "=== Network monitoring completed ==="
+    
+    # Rotar logs si son muy grandes
+    if [ -f "$NETWORK_LOG" ] && [ $(stat -c%s "$NETWORK_LOG") -gt 10485760 ]; then
+        mv "$NETWORK_LOG" "${NETWORK_LOG}.old"
+        touch "$NETWORK_LOG"
+    fi
+}
+
+# Ejecutar si se llama directamente
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi

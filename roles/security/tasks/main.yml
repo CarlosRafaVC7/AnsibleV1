@@ -1,0 +1,45 @@
+---
+# Rol principal de Seguridad Integral
+# Configura iptables, firewall, políticas ESXi y seguridad local
+
+- name: Mostrar inicio de configuración de seguridad
+  ansible.builtin.debug:
+    msg:
+      - "🔒 INICIANDO CONFIGURACIÓN DE SEGURIDAD INTEGRAL"
+      - "🖥️  Host: {{ inventory_hostname }}"
+      - "🌐 IP: {{ ansible_default_ipv4.address | default('N/A') }}"
+      - "🐧 OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+# Tareas específicas por sistema operativo
+- name: Incluir tareas Linux/Ubuntu
+  include_tasks: linux_security.yml
+  when: ansible_os_family == "Debian"
+
+- name: Incluir tareas Windows
+  include_tasks: windows_security.yml
+  when: ansible_os_family == "Windows"
+
+- name: Incluir tareas macOS
+  include_tasks: macos_security.yml
+  when: ansible_os_family == "Darwin"
+
+# Configuración común de red y conectividad
+- name: Incluir configuración de red segura
+  include_tasks: network_security.yml
+
+# Políticas de seguridad avanzada
+- name: Incluir políticas avanzadas
+  include_tasks: advanced_policies.yml
+
+# Monitoreo y logging de seguridad
+- name: Incluir monitoreo de seguridad
+  include_tasks: security_monitoring.yml
+
+- name: Mostrar resumen de seguridad configurada
+  ansible.builtin.debug:
+    msg:
+      - "✅ CONFIGURACIÓN DE SEGURIDAD COMPLETADA"
+      - "🔒 Firewall configurado y activo"
+      - "🌐 Políticas de red aplicadas"
+      - "📊 Monitoreo de seguridad habilitado"
+      - "🛡️  Sistema protegido según políticas ESXi"

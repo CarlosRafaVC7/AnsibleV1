@@ -1,0 +1,36 @@
+# Configuración de calidad de contraseñas
+# Generado por Ansible - {{ ansible_managed_banner }}
+
+{% if academic_password_policy is defined %}
+# Configuración para laboratorio académico
+minlen = {{ academic_password_policy.min_length | default(8) }}
+minclass = {{ 3 if academic_password_policy.complexity else 2 }}
+maxrepeat = 2
+maxsequence = 3
+dictcheck = {{ 1 if academic_password_policy.dictionary_check else 0 }}
+usercheck = 1
+enforcing = 1
+
+# Configuración de historial
+remember = {{ academic_password_policy.history | default(5) }}
+
+{% else %}
+# Configuración por defecto
+minlen = 8
+minclass = 3
+maxrepeat = 2
+maxsequence = 3
+dictcheck = 1
+usercheck = 1
+enforcing = 1
+remember = 5
+{% endif %}
+
+# Configuración adicional de seguridad
+# Rechazar contraseñas basadas en información del usuario
+usersubstr = 2
+
+# Configuración de cracklib
+difok = 3
+gecoscheck = 1
+badwords = password 123456 qwerty admin root

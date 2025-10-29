@@ -37,7 +37,7 @@
   ansible.builtin.copy:
     content: |
       # Archivo temporal - Actualizar inventory/hosts.ini con estas IPs
-      # Generado: {{ ansible_date_time.iso8601 }}
+      # Generado: {{ ansible_date_time.iso8601 | default('manual') }}
       
       [academico]
       # Ubuntu VM - Actualizar con IP real
