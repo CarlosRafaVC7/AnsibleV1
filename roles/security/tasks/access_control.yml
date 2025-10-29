@@ -20,18 +20,18 @@
   block:
     - name: "📦 Instalar paquetes de seguridad PAM"
       ansible.builtin.package:
-        name: "{{ pam_packages[ansible_os_family] | default([]) }}"
+        name: "{{ item }}"
         state: present
+      loop: "{{ pam_packages[ansible_os_family] | default([]) }}"
+      failed_when: false
       vars:
         pam_packages:
           Debian:
             - libpam-pwquality
-            - google-authenticator-libpam
             - libpam-tmpdir
             - libpam-modules-extra
           RedHat:
             - pam_pwquality
-            - google-authenticator
             - pam_tmpdir
             - pam_cracklib
           Ubuntu:
@@ -41,7 +41,28 @@
             - libpam-modules-extra
       ignore_errors: true
 
+    - name: "� Intentar instalar Google Authenticator (opcional)"
+      ansible.builtin.package:
+        name: "{{ google_auth_packages[ansible_os_family] | default([]) }}"
+        state: present
+      vars:
+        google_auth_packages:
+          Debian:
+            - libpam-google-authenticator
+          RedHat:
+            - google-authenticator
+          Ubuntu:
+            - libpam-google-authenticator
+      failed_when: false
+      ignore_errors: yes
+      register: google_auth_result
+
+    - name: "ℹ️ Mostrar estado de Google Authenticator"
+      ansible.builtin.debug:
+        msg: "Google Authenticator: {{ 'Instalado ✅' if google_auth_result.changed else 'No disponible (opcional) ⚠️' }}"
+
     - name: "🔒 Configurar límites de recursos del sistema"
+      become: true
       ansible.builtin.template:
         src: "limits.conf.j2"
         dest: "/etc/security/limits.conf"
@@ -49,6 +70,7 @@
         owner: root
         group: root
         mode: "0644"
+
 
     - name: "🛡️ Configurar login.defs para políticas de contraseñas"
       ansible.builtin.template:
@@ -83,10 +105,14 @@
         mode: "0644"
 
     - name: "⏰ Configurar tiempo de sesión y timeouts"
+      become: true
       ansible.builtin.lineinfile:
         path: "/etc/security/limits.conf"
         line: "{{ item }}"
         create: yes
+        owner: root
+        group: root
+        mode: '0644'
       loop:
         - "* soft nofile 65536"
         - "* hard nofile 65536"
@@ -98,6 +124,7 @@
         - "@practice hard maxlogins 3"
 
     - name: "🚫 Configurar restricciones de acceso por tiempo"
+      become: true
       ansible.builtin.template:
         src: "time.conf.j2"
         dest: "/etc/security/time.conf"
@@ -111,7 +138,16 @@
         name: auditd
         state: present
 
-    - name: "📋 Configurar reglas de auditoría"
+    - name: "� Crear directorio de reglas de auditoría"
+      ansible.builtin.file:
+        path: "/etc/audit/rules.d"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: yes
+
+    - name: "�📋 Configurar reglas de auditoría"
       ansible.builtin.template:
         src: "audit.rules.j2"
         dest: "/etc/audit/rules.d/ansible-security.rules"
@@ -119,6 +155,7 @@
         owner: root
         group: root
         mode: "0640"
+      become: yes
       notify: restart auditd
 
     - name: "🔐 Configurar AppArmor/SELinux (si está disponible)"
@@ -261,7 +298,10 @@
           PasswordAuthentication {{ 'yes' if ssh.password_authentication else 'no' }}
           PubkeyAuthentication {{ 'yes' if ssh.pubkey_authentication else 'no' }}
         marker: "# {mark} ANSIBLE MANAGED BLOCK - SSH SECURITY"
-      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+        create: no
+      when: 
+        - ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+        - "'/etc/ssh/sshd_config' is file"
       notify: restart ssh
 
   tags:
@@ -291,7 +331,16 @@
         user: root
       when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
 
-    - name: "📋 Crear log de eventos de acceso"
+    - name: "� Crear directorio de logs de seguridad"
+      ansible.builtin.file:
+        path: "{{ monitoring.log_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: "�📋 Crear log de eventos de acceso"
       ansible.builtin.file:
         path: "{{ monitoring.log_directory }}/access_events.log"
         state: touch

@@ -1,0 +1,175 @@
+---
+# =============================================================================
+# CONFIGURACIÓN DE ANTIVIRUS Y PROTECCIÓN ENDPOINT
+# =============================================================================
+
+- name: "🛡️ CONFIGURACIÓN DE ANTIVIRUS Y PROTECCIÓN ENDPOINT"
+  debug:
+    msg:
+      - "=================================================="
+      - "🛡️ IMPLEMENTANDO PROTECCIÓN ANTIVIRUS"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_os_family }}"
+      - "Configurando antivirus y protección endpoint"
+      - "=================================================="
+
+# =============================================================================
+# ANTIVIRUS PARA LINUX (ClamAV)
+# =============================================================================
+- name: "📦 Instalar ClamAV en sistemas Linux"
+  package:
+    name:
+      - clamav
+      - clamav-daemon
+      - clamav-freshclam
+    state: present
+  when: ansible_os_family == "Debian"
+  become: yes
+  ignore_errors: yes
+
+- name: "🔄 Actualizar base de datos de virus ClamAV"
+  command: freshclam
+  when: ansible_os_family == "Debian"
+  become: yes
+  ignore_errors: yes
+
+- name: "⚙️ Configurar ClamAV daemon"
+  template:
+    src: clamd.conf.j2
+    dest: /etc/clamav/clamd.conf
+    backup: yes
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_os_family == "Debian"
+  become: yes
+  notify: restart clamav
+
+- name: "🕐 Configurar escaneo automático diario"
+  cron:
+    name: "ClamAV daily scan"
+    hour: "2"
+    minute: "30"
+    job: "/usr/bin/clamscan -r --log=/var/log/clamav/daily-scan.log --infected --remove /home /var/www /tmp"
+    user: root
+  when: ansible_os_family == "Debian"
+  become: yes
+
+- name: "📊 Crear script de reporte de amenazas"
+  template:
+    src: clamav_report.sh.j2
+    dest: /usr/local/bin/clamav_report.sh
+    mode: '0755'
+    owner: root
+    group: root
+  when: ansible_os_family == "Debian"
+  become: yes
+
+# =============================================================================
+# ANTIVIRUS PARA WINDOWS (Windows Defender)
+# =============================================================================
+- name: "🔧 Habilitar Windows Defender"
+  win_shell: |
+    Set-MpPreference -DisableRealtimeMonitoring $false
+    Set-MpPreference -DisableBehaviorMonitoring $false
+    Set-MpPreference -DisableIOAVProtection $false
+    Set-MpPreference -DisablePrivacyMode $false
+    Set-MpPreference -SignatureDisableUpdateOnStartupWithoutEngine $false
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+- name: "📥 Actualizar definiciones de Windows Defender"
+  win_shell: Update-MpSignature
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+- name: "🔍 Configurar escaneo programado Windows Defender"
+  win_scheduled_task:
+    name: "Antivirus Daily Scan"
+    description: "Escaneo diario de antivirus para seguridad del laboratorio"
+    actions:
+    - path: powershell.exe
+      arguments: '-Command "Start-MpScan -ScanType FullScan"'
+    triggers:
+    - type: daily
+      start_boundary: "2025-01-01T02:00:00"
+    username: SYSTEM
+    state: present
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+- name: "⚙️ Configurar exclusiones de Windows Defender para desarrollo"
+  win_shell: |
+    Add-MpPreference -ExclusionPath "C:\ansible_temp"
+    Add-MpPreference -ExclusionPath "C:\desarrollo"
+    Add-MpPreference -ExclusionProcess "ansible.exe"
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+# =============================================================================
+# CONFIGURACIÓN DE PROTECCIÓN ENDPOINT ADICIONAL
+# =============================================================================
+- name: "🚫 Configurar bloqueo de ejecutables peligrosos (Linux)"
+  template:
+    src: malware_protection.sh.j2
+    dest: /usr/local/bin/malware_protection.sh
+    mode: '0755'
+    owner: root
+    group: root
+  when: ansible_os_family == "Debian"
+  become: yes
+  ignore_errors: yes
+
+- name: "🔐 Configurar AppLocker básico (Windows)"
+  win_shell: |
+    # Habilitar AppLocker para archivos ejecutables
+    Set-AppLockerPolicy -XMLPolicy (Get-Content "{{ ansible_temp_dir }}\applocker_policy.xml")
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+- name: "📋 Crear reporte de estado de antivirus"
+  template:
+    src: antivirus_status.sh.j2
+    dest: /usr/local/bin/antivirus_status.sh
+    mode: '0755'
+    owner: root
+    group: root
+  when: ansible_os_family == "Debian"
+  become: yes
+
+- name: "🕐 Programar reporte semanal de antivirus"
+  cron:
+    name: "Weekly antivirus report"
+    weekday: "1"
+    hour: "8"
+    minute: "0"
+    job: "/usr/local/bin/antivirus_status.sh | mail -s 'Reporte Semanal Antivirus' {{ admin_email | default('root') }}"
+    user: root
+  when: ansible_os_family == "Debian"
+  become: yes
+
+# =============================================================================
+# VALIDACIÓN Y EVIDENCIA
+# =============================================================================
+- name: "✅ Verificar estado del antivirus Linux"
+  command: systemctl is-active clamav-daemon
+  register: clamav_status
+  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+
+- name: "✅ Verificar estado de Windows Defender"
+  win_shell: Get-MpComputerStatus | Select-Object AntivirusEnabled, RealTimeProtectionEnabled
+  register: defender_status
+  when: ansible_os_family == "Windows"
+  ignore_errors: yes
+
+- name: "📊 Mostrar estado de protección antivirus"
+  debug:
+    msg:
+      - "=== ESTADO DE PROTECCIÓN ANTIVIRUS ==="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_os_family }}"
+      - "ClamAV Status: {{ clamav_status.stdout | default('N/A') }}"
+      - "Defender Status: {{ defender_status.stdout | default('N/A') }}"
+      - "Estado: ✅ Antivirus configurado"

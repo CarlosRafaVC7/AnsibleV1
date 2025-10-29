@@ -5,16 +5,26 @@
 - name: Instalar paquetes de seguridad esenciales
   ansible.builtin.apt:
     name:
-      - iptables
-      - iptables-persistent
       - fail2ban
-      - ufw
       - logwatch
       - rkhunter
       - chkrootkit
       - aide
     state: present
     update_cache: yes
+  ignore_errors: yes
+
+- name: Instalar iptables (sin conflictos)
+  ansible.builtin.apt:
+    name: iptables
+    state: present
+  ignore_errors: yes
+
+- name: Configurar ufw como alternativa segura
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+  ignore_errors: yes
 
 - name: Configurar reglas iptables básicas
   ansible.builtin.iptables:

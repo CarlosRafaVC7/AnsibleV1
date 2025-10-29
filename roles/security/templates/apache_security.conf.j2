@@ -1,0 +1,49 @@
+# {{ ansible_managed }}
+# Apache Security Configuration
+# Host: {{ ansible_hostname }}
+# Generated: {{ ansible_date_time.iso8601 }}
+
+# Security Headers
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options DENY
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Hide Apache version and OS information
+ServerTokens Prod
+ServerSignature Off
+
+# Disable server-status and server-info
+<Location "/server-status">
+    Require all denied
+</Location>
+
+<Location "/server-info">
+    Require all denied
+</Location>
+
+# Disable TRACE method
+TraceEnable Off
+
+# Prevent access to .htaccess files
+<Files ".ht*">
+    Require all denied
+</Files>
+
+# Prevent access to sensitive files
+<FilesMatch "\.(log|sql|conf|ini|bak|backup)$">
+    Require all denied
+</FilesMatch>
+
+# Limit request size (10MB)
+LimitRequestBody 10485760
+
+# Timeout settings
+Timeout {{ apache_timeout | default('60') }}
+KeepAliveTimeout {{ apache_keepalive_timeout | default('5') }}
+
+# Log security events
+LogFormat "%h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\" %D" security
+CustomLog {{ apache_log_dir | default('/var/log/apache2') }}/security.log security

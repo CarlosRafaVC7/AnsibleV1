@@ -1,0 +1,66 @@
+---
+# =============================================================================
+# HANDLERS PARA EL ROL DE SECURITY
+# =============================================================================
+
+- name: restart auditd
+  ansible.builtin.systemd:
+    name: auditd
+    state: restarted
+    enabled: yes
+  become: yes
+
+- name: restart clamav
+  ansible.builtin.systemd:
+    name: clamav-daemon
+    state: restarted
+    enabled: yes
+  when: ansible_os_family == "Debian"
+  become: yes
+
+- name: restart ssh
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+  become: yes
+
+- name: restart fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: restarted
+    enabled: yes
+  when: ansible_os_family == "Debian"
+  become: yes
+
+- name: reload firewall
+  ansible.builtin.shell: |
+    {% if ansible_os_family == "Debian" %}
+    ufw --force enable
+    {% else %}
+    systemctl reload iptables
+    {% endif %}
+  become: yes
+
+- name: restart mysql
+  ansible.builtin.systemd:
+    name: "{{ 'mysql' if ansible_distribution == 'Ubuntu' else 'mariadb' }}"
+    state: restarted
+    enabled: yes
+  become: yes
+  ignore_errors: true
+
+- name: restart postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    state: restarted
+    enabled: yes
+  become: yes
+  ignore_errors: true
+
+- name: restart apache2
+  ansible.builtin.systemd:
+    name: apache2
+    state: restarted
+    enabled: yes
+  become: yes
+  ignore_errors: true

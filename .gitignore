@@ -1,103 +1,22 @@
-# Archivos de configuración local
-.env
-.env.local
-.env.*.local
-
-# Directorios de entorno virtual de Python
-.venv/
-venv/
-env/
-ENV/
-
-# Archivos de logs
-*.log
-logs/
-
-# Archivos temporales
-*.tmp
-*.temp
-.tmp/
-
-# Archivos de backup de Ansible
-*.backup
-*.bak
-
-# Archivos de estado de Terraform (si se usa)
-*.tfstate
-*.tfstate.backup
-
-# Archivos de credenciales
+# Ansible
+*.retry
 .vault_pass
-vault_password.txt
-credentials.yml
-secrets.yml
+vault_vars.yml
+host_vars/*/vault.yml
 
-# Archivos específicos de IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Archivos de sistema
-.DS_Store
-Thumbs.db
-
-# Archivos de cache de Python
+# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+.venv/
+venv/
 
-# Coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
+# Logs y evidencia temporal
+logs_*/
+evidence_*/
+*.log
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# SSH Keys
+# Credenciales
+*_credentials.yml
+*_secrets.yml
 *.pem
 *.key
-id_rsa*
-id_ed25519*
-*.pub
-
-# Certificados SSL
-*.crt
-*.cert
-*.p12
-*.pfx
-
-# Archivos de configuración sensibles
-ansible.log
-retry.yml
-*.retry

@@ -1,0 +1,53 @@
+---
+# =============================================================================
+# GENERACIÓN DE REPORTES CSV SEGUROS
+# =============================================================================
+
+- name: "📊 CONFIGURAR DIRECTORIO DE REPORTES"
+  ansible.builtin.file:
+    path: "{{ reports_directory | default('/tmp/ansible_reports') }}"
+    state: directory
+    mode: '0755'
+
+- name: "📋 RECOPILAR DATOS DEL SISTEMA"
+  ansible.builtin.set_fact:
+    system_report_data:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ ansible_hostname }}"
+      os_family: "{{ ansible_os_family }}"
+      os_version: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+      architecture: "{{ ansible_architecture }}"
+      cpu_cores: "{{ ansible_processor_cores }}"
+      memory_mb: "{{ ansible_memtotal_mb }}"
+      disk_usage: "{{ ansible_mounts | length }}"
+      uptime_seconds: "{{ ansible_uptime_seconds | default(0) }}"
+      last_boot: "{{ ansible_date_time.date }}"
+
+- name: "🔐 RECOPILAR DATOS DE SEGURIDAD"
+  ansible.builtin.set_fact:
+    security_report_data:
+      firewall_status: "{{ firewall_enabled | default('unknown') }}"
+      ssh_status: "{{ ssh_service_enabled | default('unknown') }}"
+      failed_logins: "{{ failed_login_count | default(0) }}"
+      open_ports: "{{ open_ports_count | default(0) }}"
+      last_update: "{{ last_system_update | default('unknown') }}"
+      antivirus_status: "{{ antivirus_enabled | default('unknown') }}"
+
+- name: "📊 GENERAR REPORTE CSV DE SISTEMA"
+  ansible.builtin.template:
+    src: system_report.csv.j2
+    dest: "{{ reports_directory | default('/tmp/ansible_reports') }}/system_report_{{ ansible_date_time.date }}.csv"
+    mode: '0644'
+
+- name: "🔐 GENERAR REPORTE CSV DE SEGURIDAD"
+  ansible.builtin.template:
+    src: security_report.csv.j2
+    dest: "{{ reports_directory | default('/tmp/ansible_reports') }}/security_report_{{ ansible_date_time.date }}.csv"
+    mode: '0644'
+
+- name: "📋 MOSTRAR UBICACIÓN DE REPORTES"
+  ansible.builtin.debug:
+    msg:
+      - "📊 REPORTES CSV GENERADOS:"
+      - "  • Sistema: {{ reports_directory | default('/tmp/ansible_reports') }}/system_report_{{ ansible_date_time.date }}.csv"
+      - "  • Seguridad: {{ reports_directory | default('/tmp/ansible_reports') }}/security_report_{{ ansible_date_time.date }}.csv"

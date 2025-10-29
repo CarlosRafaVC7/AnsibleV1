@@ -1,0 +1,72 @@
+# {{ ansible_managed }}
+# ModSecurity Configuration
+# Host: {{ ansible_hostname }}
+# Generated: {{ ansible_date_time.iso8601 }}
+
+# Enable ModSecurity engine
+SecRuleEngine On
+
+# Request body handling
+SecRequestBodyAccess On
+SecRequestBodyLimit {{ modsecurity_body_limit | default('13107200') }}
+SecRequestBodyNoFilesLimit {{ modsecurity_body_nofiles_limit | default('131072') }}
+SecRequestBodyInMemoryLimit {{ modsecurity_body_memory_limit | default('131072') }}
+SecRequestBodyLimitAction Reject
+
+# Response body handling
+SecResponseBodyAccess On
+SecResponseBodyMimeType text/plain text/html text/xml
+SecResponseBodyLimit {{ modsecurity_response_limit | default('524288') }}
+SecResponseBodyLimitAction ProcessPartial
+
+# Filesystem configuration
+SecDataDir {{ modsecurity_data_dir | default('/tmp') }}
+SecTmpDir {{ modsecurity_tmp_dir | default('/tmp') }}
+
+# Debug log
+SecDebugLog {{ modsecurity_debug_log | default('/var/log/apache2/modsec_debug.log') }}
+SecDebugLogLevel {{ modsecurity_debug_level | default('0') }}
+
+# Audit log
+SecAuditEngine {{ modsecurity_audit_engine | default('RelevantOnly') }}
+SecAuditLogRelevantStatus "^(?:5|4(?!04))"
+SecAuditLogParts {{ modsecurity_audit_parts | default('ABIJDEFHZ') }}
+SecAuditLogType {{ modsecurity_audit_type | default('Serial') }}
+SecAuditLog {{ modsecurity_audit_log | default('/var/log/apache2/modsec_audit.log') }}
+
+# Upload handling
+SecUploadDir {{ modsecurity_upload_dir | default('/tmp') }}
+SecUploadKeepFiles {{ modsecurity_keep_files | default('Off') }}
+
+# Basic rules
+SecRule REQUEST_HEADERS:Content-Type "text/xml" \
+     "id:'200000',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=XML"
+
+SecRule REQUEST_HEADERS:Content-Type "application/xml" \
+     "id:'200001',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=XML"
+
+SecRule REQUEST_HEADERS:Content-Type "text/xml" \
+     "id:'200002',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=XML"
+
+# Block SQL injection attempts
+SecRule ARGS "@detectSQLi" \
+    "id:'1001',\
+    phase:2,\
+    block,\
+    msg:'SQL Injection Attack Detected',\
+    logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}',\
+    tag:'attack-sqli'"
+
+# Block XSS attempts
+SecRule ARGS "@detectXSS" \
+    "id:'1002',\
+    phase:2,\
+    block,\
+    msg:'XSS Attack Detected',\
+    logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}',\
+    tag:'attack-xss'"
+
+# Include OWASP Core Rule Set if available
+{% if modsecurity_crs_enabled | default(true) %}
+Include {{ modsecurity_crs_path | default('/etc/modsecurity/crs/') }}*.conf
+{% endif %}

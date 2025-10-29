@@ -1,0 +1,72 @@
+# Reglas de auditoría para seguridad del sistema
+# Generado por Ansible - {{ ansible_date_time.date }}
+
+# ==============================================
+# REGLAS DE AUDITORÍA DE SEGURIDAD
+# ==============================================
+
+# Eliminar reglas existentes
+-D
+
+# Configurar buffer
+-b 8192
+
+# Configurar failure mode
+-f 1
+
+# ==============================================
+# MONITOREO DE ARCHIVOS CRÍTICOS
+# ==============================================
+
+# Monitorear cambios en /etc/passwd y /etc/group
+-w /etc/passwd -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+
+# Monitorear cambios en configuración SSH
+-w /etc/ssh/sshd_config -p wa -k sshd_config
+
+# Monitorear cambios en sudoers
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+
+# ==============================================
+# MONITOREO DE ACCESOS Y AUTENTICACIÓN
+# ==============================================
+
+# Monitorear intentos de login
+-w /var/log/auth.log -p wa -k auth_log
+-w /var/log/secure -p wa -k secure_log
+
+# Monitorear cambios en PAM
+-w /etc/pam.d/ -p wa -k pam_config
+
+# ==============================================
+# MONITOREO DE PRIVILEGIOS
+# ==============================================
+
+# Monitorear uso de su y sudo
+-a always,exit -F arch=b64 -S execve -F path=/bin/su -k privilege_escalation
+-a always,exit -F arch=b64 -S execve -F path=/usr/bin/sudo -k privilege_escalation
+
+# ==============================================
+# MONITOREO DE CAMBIOS EN SISTEMA
+# ==============================================
+
+# Monitorear montajes y desmontajes
+-a always,exit -F arch=b64 -S mount -S umount2 -k mount
+
+# Monitorear cambios en tiempo del sistema
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time_change
+
+# ==============================================
+# FINALIZAR CONFIGURACIÓN
+# ==============================================
+
+# Hacer inmutable las reglas (comentar para testing)
+{% if audit_immutable is defined and audit_immutable %}
+-e 2
+{% else %}
+# -e 2  # Descomentado para permitir cambios durante testing
+{% endif %}

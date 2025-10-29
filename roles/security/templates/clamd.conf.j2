@@ -1,0 +1,90 @@
+# Configuración de ClamAV Daemon
+# Generado por Ansible - {{ ansible_date_time.date }}
+
+# ==============================================
+# CONFIGURACIÓN BÁSICA
+# ==============================================
+LogFile /var/log/clamav/clamav.log
+LogFileUnlock yes
+LogFileMaxSize 100M
+LogTime yes
+LogClean yes
+LogSyslog yes
+LogFacility LOG_LOCAL6
+LogVerbose no
+LogRotate yes
+
+# ==============================================
+# CONFIGURACIÓN DE DAEMON
+# ==============================================
+PidFile /var/run/clamav/clamd.pid
+LocalSocket /var/run/clamav/clamd.ctl
+LocalSocketGroup clamav
+LocalSocketMode 666
+FixStaleSocket yes
+TCPSocket 3310
+TCPAddr 127.0.0.1
+
+# ==============================================
+# CONFIGURACIÓN DE ESCANEO
+# ==============================================
+MaxDirectoryRecursion 25
+MaxThreads 12
+ReadTimeout 180
+CommandReadTimeout 5
+SendBufTimeout 200
+MaxQueue 100
+
+# ==============================================
+# CONFIGURACIÓN DE ARCHIVOS
+# ==============================================
+StreamMaxLength 25M
+MaxFileSize 150M
+MaxRecursion 16
+MaxFiles 10000
+MaxEmbeddedPE 10M
+MaxHTMLNormalize 10M
+MaxHTMLNoTags 2M
+MaxScriptNormalize 5M
+
+# ==============================================
+# PROTECCIÓN CONTRA MALWARE
+# ==============================================
+ScanPE yes
+ScanELF yes
+ScanOLE2 yes
+ScanPDF yes
+ScanSWF yes
+ScanHTML yes
+ScanArchive yes
+ScanMail yes
+
+# ==============================================
+# CONFIGURACIÓN DE ALERTAS
+# ==============================================
+{% if security_alerts is defined and security_alerts.email %}
+VirusEvent /usr/local/bin/virus_alert.sh
+{% endif %}
+
+# ==============================================
+# DETECCIÓN HEURÍSTICA
+# ==============================================
+HeuristicScanPrecedence yes
+StructuredDataDetection yes
+StructuredMinCreditCardCount 3
+StructuredMinSSNCount 3
+
+# ==============================================
+# EXCLUSIONES DE ESCANEO
+# ==============================================
+ExcludePath ^/proc/
+ExcludePath ^/sys/
+ExcludePath ^/dev/
+ExcludePath ^/var/lib/mysql/
+ExcludePath ^/var/lib/postgresql/
+
+# ==============================================
+# CONFIGURACIÓN DE PERFORMANCE
+# ==============================================
+SelfCheck 3600
+ConcurrentDatabaseReload yes

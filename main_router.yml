@@ -1,0 +1,174 @@
+---
+# =============================================================================
+# MAIN ROUTER - Orquestador Principal del Framework Ansible
+# =============================================================================
+# Descripción: Playbook principal que orquesta todos los roles y tareas
+# Tipo: Router/Orchestrator siguiendo best practices
+# Hosts: localhost (control node)
+# =============================================================================
+
+- name: "🎯 ANSIBLE SECURITY FRAMEWORK - MAIN ROUTER"
+  hosts: localhost
+  become: true
+  become_method: sudo
+  gather_facts: yes
+  vars:
+    # =======================================================================
+    # CONFIGURACIÓN DE ACCIONES VÁLIDAS
+    # =======================================================================
+    valid_actions:
+      - infrastructure    # Crear VMs en ESXi/VirtualBox
+      - security          # Configurar seguridad integral
+      - hardening         # Endurecer sistemas
+      - monitoring        # Configurar monitoreo
+      - reporting         # Generar reportes
+      - validation        # Validar configuraciones
+      - cleanup           # Limpiar recursos temporales
+
+    # =======================================================================
+    # CONFIGURACIÓN DE EJECUCIÓN
+    # =======================================================================
+    execution_mode: "{{ run_action | default('security') }}"
+    target_environment: "{{ environment | default('development') }}"
+    enable_reporting: "{{ generate_reports | default(true) }}"
+
+  tasks:
+    # =======================================================================
+    # VALIDACIÓN INICIAL
+    # =======================================================================
+    - name: "🔍 VALIDAR PARÁMETROS DE ENTRADA"
+      ansible.builtin.assert:
+        that:
+          - execution_mode in valid_actions
+        fail_msg: "❌ Acción no válida: {{ execution_mode }}. Acciones válidas: {{ valid_actions | join(', ') }}"
+        success_msg: "✅ Acción válida: {{ execution_mode }}"
+
+    - name: "📋 MOSTRAR CONFIGURACIÓN DE EJECUCIÓN"
+      ansible.builtin.debug:
+        msg:
+          - "=================================================="
+          - "🎯 CONFIGURACIÓN DEL MAIN ROUTER"
+          - "=================================================="
+          - "Acción: {{ execution_mode }}"
+          - "Entorno: {{ target_environment }}"
+          - "Generar reportes: {{ enable_reporting }}"
+          - "Host de control: {{ inventory_hostname }}"
+          - "Fecha/Hora: {{ ansible_date_time.iso8601 }}"
+          - "=================================================="
+
+    # =======================================================================
+    # EJECUCIÓN DE ROLES SEGÚN ACCIÓN
+    # =======================================================================
+    
+    # --- INFRAESTRUCTURA ---
+    - name: "🏗️ EJECUTAR ROL DE INFRAESTRUCTURA"
+      ansible.builtin.include_role:
+        name: infrastructure
+      when: execution_mode == "infrastructure"
+      tags: 
+        - infrastructure
+        - never
+
+    # --- SEGURIDAD INTEGRAL ---
+    - name: "🔐 EJECUTAR ROL DE SEGURIDAD"
+      ansible.builtin.include_role:
+        name: security
+      when: execution_mode == "security"
+      tags:
+        - security
+
+    # --- HARDENING DE SISTEMAS ---
+    - name: "🛡️ EJECUTAR ROL DE HARDENING"
+      ansible.builtin.include_role:
+        name: hardening
+      when: execution_mode == "hardening"
+      tags:
+        - hardening
+        - never
+
+    # --- MONITOREO ---
+    - name: "📊 EJECUTAR ROL DE MONITOREO"
+      ansible.builtin.include_role:
+        name: monitoring
+      when: execution_mode == "monitoring"
+      tags:
+        - monitoring
+
+    # --- REPORTES ---
+    - name: "📋 GENERAR REPORTES DE SISTEMA"
+      ansible.builtin.include_tasks: reporting/generate_reports.yml
+      when: execution_mode == "reporting" or enable_reporting | bool
+      tags:
+        - reporting
+
+    # --- VALIDACIÓN ---
+    - name: "✅ EJECUTAR VALIDACIONES"
+      ansible.builtin.include_tasks: validation/validate_all.yml
+      when: execution_mode == "validation"
+      tags:
+        - validation
+
+    # --- LIMPIEZA ---
+    - name: "🧹 EJECUTAR LIMPIEZA DE RECURSOS"
+      ansible.builtin.include_tasks: cleanup/cleanup_resources.yml
+      when: execution_mode == "cleanup"
+      tags:
+        - cleanup
+        - never
+
+    # =======================================================================
+    # RESUMEN FINAL
+    # =======================================================================
+    - name: "🎯 RESUMEN DE EJECUCIÓN COMPLETADA"
+      ansible.builtin.debug:
+        msg:
+          - "=================================================="
+          - "✅ MAIN ROUTER - EJECUCIÓN COMPLETADA"
+          - "=================================================="
+          - "Acción ejecutada: {{ execution_mode }}"
+          - "Estado: EXITOSO"
+          - "Tiempo de ejecución: {{ ansible_date_time.iso8601 }}"
+          - "Host procesado: {{ inventory_hostname }}"
+          - ""
+          - "📊 Próximos pasos recomendados:"
+          - "  1. Revisar logs generados"
+          - "  2. Validar configuraciones aplicadas"
+          - "  3. Ejecutar tests de conectividad"
+          - ""
+          - "🔧 Comandos útiles:"
+          - "  # Validar: ansible-playbook main_router.yml -e action=validation"
+          - "  # Reportes: ansible-playbook main_router.yml -e action=reporting"
+          - "  # Monitoreo: ansible-playbook main_router.yml -e action=monitoring"
+          - "=================================================="
+      tags:
+        - always
+
+# =============================================================================
+# EJEMPLOS DE USO DEL MAIN ROUTER
+# =============================================================================
+# 
+# # Ejecución por defecto (seguridad)
+# ansible-playbook main_router.yml
+# 
+# # Crear infraestructura
+# ansible-playbook main_router.yml -e action=infrastructure
+# 
+# # Hardening de sistemas
+# ansible-playbook main_router.yml -e action=hardening
+# 
+# # Generar reportes
+# ansible-playbook main_router.yml -e action=reporting
+# 
+# # Validar configuraciones
+# ansible-playbook main_router.yml -e action=validation
+# 
+# # Limpiar recursos
+# ansible-playbook main_router.yml -e action=cleanup
+# 
+# # Ejecución con tags específicos
+# ansible-playbook main_router.yml --tags security,monitoring
+# 
+# # Ejecución en entorno específico
+# ansible-playbook main_router.yml -e environment=production
+# 
+# =============================================================================

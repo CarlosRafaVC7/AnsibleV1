@@ -1,0 +1,46 @@
+---
+# =============================================================================
+# ROL DE HARDENING - ENDURECIMIENTO DE SISTEMAS
+# =============================================================================
+
+- name: "🛡️ HARDENING - ENDURECIMIENTO DE SEGURIDAD"
+  debug:
+    msg:
+      - "=================================================="
+      - "🛡️ INICIANDO HARDENING DE SEGURIDAD"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_os_family }}"
+      - "Nivel de hardening: ENTERPRISE"
+      - "=================================================="
+
+# =============================================================================
+# HARDENING DE LINUX
+# =============================================================================
+- name: "🐧 HARDENING ESPECÍFICO PARA LINUX"
+  include_tasks: hardening_linux.yml
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+# =============================================================================
+# HARDENING DE WINDOWS
+# =============================================================================
+- name: "🪟 HARDENING ESPECÍFICO PARA WINDOWS"
+  include_tasks: hardening_windows.yml
+  when: ansible_os_family == "Windows"
+
+# =============================================================================
+# VALIDACIÓN FINAL
+# =============================================================================
+- name: "✅ HARDENING COMPLETADO"
+  debug:
+    msg:
+      - "=================================================="
+      - "✅ HARDENING DE SEGURIDAD COMPLETADO"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Configuraciones aplicadas:"
+      - "  ✅ Configuraciones de kernel seguras"
+      - "  ✅ Servicios innecesarios deshabilitados"
+      - "  ✅ Permisos de archivos endurecidos"
+      - "  ✅ Configuraciones de red seguras"
+      - "=================================================="

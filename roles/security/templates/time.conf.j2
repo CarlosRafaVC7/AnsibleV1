@@ -1,0 +1,31 @@
+# Configuración de restricciones de tiempo de acceso
+# Generado por Ansible - {{ ansible_date_time.date }}
+
+# ==============================================
+# CONFIGURACIÓN DE HORARIOS DE ACCESO
+# ==============================================
+
+{% if academic_time_restrictions is defined %}
+# Horarios académicos (lunes a viernes, 7:00-22:00)
+{{ academic_time_restrictions.group | default('students') }} * * * WdMo0700-2200
+
+# Horarios para prácticas (24/7 durante días de semana)
+practice * * * Wk0000-2359
+{% else %}
+# Configuración por defecto - acceso completo
+* * * * Al0000-2359
+{% endif %}
+
+# ==============================================
+# RESTRICCIONES ESPECIALES
+# ==============================================
+
+# Sin restricciones para administradores
+root * * * Al0000-2359
+{{ ansible_user | default('axell') }} * * * Al0000-2359
+
+# Restricciones de fin de semana para estudiantes
+{% if weekend_restrictions is defined and weekend_restrictions %}
+students * * * Sa0800-2000
+students * * * Su1000-1800
+{% endif %}

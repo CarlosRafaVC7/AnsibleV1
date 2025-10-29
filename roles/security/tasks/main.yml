@@ -53,7 +53,18 @@
     - postgresql
 
 # ==============================================
-# 4. SEGURIDAD DE RED Y NIC
+# 4. ANTIVIRUS Y PROTECCIÓN ENDPOINT
+# ==============================================
+- name: "🛡️ Configurar antivirus y protección endpoint"
+  ansible.builtin.include_tasks: antivirus_security.yml
+  tags:
+    - antivirus
+    - endpoint
+    - malware
+    - protection
+
+# ==============================================
+# 5. SEGURIDAD DE RED Y NIC
 # ==============================================
 - name: "🌐 Configurar seguridad de red e interfaces"
   ansible.builtin.include_tasks: network_security.yml
@@ -64,7 +75,7 @@
     - connectivity
 
 # ==============================================
-# 5. CONFIGURACIÓN DE FIREWALL
+# 6. CONFIGURACIÓN DE FIREWALL
 # ==============================================
 - name: "🛡️ Configurar firewall avanzado"
   ansible.builtin.include_tasks: linux_security.yml
@@ -84,7 +95,7 @@
     - defender
 
 # ==============================================
-# 6. MONITOREO Y ALERTAS
+# 7. MONITOREO Y ALERTAS
 # ==============================================
 - name: "📊 Configurar monitoreo de seguridad"
   ansible.builtin.include_tasks: security_monitoring.yml
@@ -94,7 +105,7 @@
     - logging
 
 # ==============================================
-# 7. INFORMACIÓN DEL SISTEMA
+# 8. INFORMACIÓN DEL SISTEMA
 # ==============================================
 - name: "📋 Recopilar información completa del sistema"
   ansible.builtin.include_tasks: system_info.yml
@@ -105,7 +116,7 @@
     - always
 
 # ==============================================
-# 8. VALIDACIÓN FINAL
+# 9. VALIDACIÓN FINAL
 # ==============================================
 - name: "✅ VALIDACIÓN FINAL DE SEGURIDAD"
   ansible.builtin.debug:
@@ -119,6 +130,7 @@
       - "  ✅ Usuarios y grupos específicos por laboratorio"
       - "  ✅ Controles de acceso y políticas PAM"
       - "  ✅ Seguridad de bases de datos (MySQL/PostgreSQL)"
+      - "  ✅ Protección antivirus y endpoint security"
       - "  ✅ Protección de servicios web (Apache/IIS)"
       - "  ✅ Seguridad de red e interfaces NIC"
       - "  ✅ Firewall y protección perimetral"

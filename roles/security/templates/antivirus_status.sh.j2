@@ -1,0 +1,149 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# ANTIVIRUS STATUS REPORT
+# Reporte de estado del antivirus para {{ ansible_hostname }}
+# Generado: {{ ansible_date_time.iso8601 }}
+
+# Configuracion
+LOG_FILE="/var/log/antivirus_status.log"
+REPORT_FILE="/var/log/antivirus_report.txt"
+
+# Colores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+check_clamav_status() {
+    echo "=== ESTADO DE CLAMAV ==="
+    
+    if systemctl is-active --quiet clamav-daemon; then
+        echo -e "${GREEN}✅ ClamAV Daemon: ACTIVO${NC}"
+        log_message "ClamAV daemon esta funcionando"
+    else
+        echo -e "${RED}❌ ClamAV Daemon: INACTIVO${NC}"
+        log_message "ClamAV daemon no esta funcionando"
+    fi
+    
+    if command -v clamscan >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ ClamScan: DISPONIBLE${NC}"
+        echo "   Version: $(clamscan --version 2>/dev/null || echo 'No disponible')"
+    else
+        echo -e "${RED}❌ ClamScan: NO DISPONIBLE${NC}"
+    fi
+    
+    if systemctl is-active --quiet clamav-freshclam; then
+        echo -e "${GREEN}✅ FreshClam: ACTIVO${NC}"
+    else
+        echo -e "${YELLOW}⚠️ FreshClam: INACTIVO${NC}"
+    fi
+}
+
+check_database_status() {
+    echo -e "\n=== ESTADO DE BASE DE DATOS ==="
+    
+    DB_DIR="/var/lib/clamav"
+    if [[ -f "$DB_DIR/main.cvd" ]] || [[ -f "$DB_DIR/main.cld" ]]; then
+        echo -e "${GREEN}✅ Base principal: PRESENTE${NC}"
+        echo "   Fecha: $(stat -c %y "$DB_DIR"/main.* 2>/dev/null | head -1 | cut -d' ' -f1 || echo 'Desconocida')"
+    else
+        echo -e "${RED}❌ Base principal: FALTANTE${NC}"
+    fi
+    
+    if [[ -f "$DB_DIR/daily.cvd" ]] || [[ -f "$DB_DIR/daily.cld" ]]; then
+        echo -e "${GREEN}✅ Base diaria: PRESENTE${NC}"
+    else
+        echo -e "${RED}❌ Base diaria: FALTANTE${NC}"
+    fi
+    
+    if [[ -f "$DB_DIR/bytecode.cvd" ]] || [[ -f "$DB_DIR/bytecode.cld" ]]; then
+        echo -e "${GREEN}✅ Base bytecode: PRESENTE${NC}"
+    else
+        echo -e "${YELLOW}⚠️ Base bytecode: FALTANTE${NC}"
+    fi
+}
+
+check_scan_logs() {
+    echo -e "\n=== LOGS DE ESCANEO ==="
+    
+    SCAN_LOG="/var/log/clamav/clamav.log"
+    if [[ -f "$SCAN_LOG" ]]; then
+        echo -e "${GREEN}✅ Log de ClamAV: PRESENTE${NC}"
+        echo "   Tamaño: $(du -h "$SCAN_LOG" 2>/dev/null | cut -f1 || echo 'Desconocido')"
+        
+        # Buscar amenazas detectadas en las ultimas 24 horas
+        threats=$(grep -i "found" "$SCAN_LOG" 2>/dev/null | grep "$(date '+%Y-%m-%d')" | wc -l)
+        if [[ $threats -gt 0 ]]; then
+            echo -e "${RED}⚠️ Amenazas detectadas hoy: $threats${NC}"
+        else
+            echo -e "${GREEN}✅ Sin amenazas detectadas hoy${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️ Log de ClamAV: NO ENCONTRADO${NC}"
+    fi
+}
+
+check_system_performance() {
+    echo -e "\n=== RENDIMIENTO DEL SISTEMA ==="
+    
+    # Uso de CPU por ClamAV
+    clamav_cpu=$(ps aux | grep -E "(clamd|clamscan)" | grep -v grep | awk '{sum += $3} END {print sum+0}')
+    echo "CPU utilizada por ClamAV: ${clamav_cpu}%"
+    
+    # Uso de memoria
+    clamav_mem=$(ps aux | grep -E "(clamd|clamscan)" | grep -v grep | awk '{sum += $4} END {print sum+0}')
+    echo "Memoria utilizada por ClamAV: ${clamav_mem}%"
+    
+    # Espacio en disco
+    disk_usage=$(df -h /var/lib/clamav 2>/dev/null | tail -1 | awk '{print $5}' || echo "N/A")
+    echo "Uso de disco (/var/lib/clamav): $disk_usage"
+}
+
+generate_summary() {
+    echo -e "\n=== RESUMEN EJECUTIVO ==="
+    
+    local status="OPERATIVO"
+    local color="$GREEN"
+    
+    if ! systemctl is-active --quiet clamav-daemon; then
+        status="CRITICO"
+        color="$RED"
+    elif [[ ! -f "/var/lib/clamav/main.cvd" ]] && [[ ! -f "/var/lib/clamav/main.cld" ]]; then
+        status="ADVERTENCIA"
+        color="$YELLOW"
+    fi
+    
+    echo -e "${color}Estado general: $status${NC}"
+    echo "Host: {{ ansible_hostname }}"
+    echo "Fecha del reporte: $(date)"
+    echo "Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+    
+    log_message "Reporte generado - Estado: $status"
+}
+
+main() {
+    echo "=================================================="
+    echo "    REPORTE DE ESTADO DEL ANTIVIRUS"
+    echo "=================================================="
+    echo "Host: {{ ansible_hostname }}"
+    echo "Fecha: $(date)"
+    echo "=================================================="
+    
+    log_message "Iniciando reporte de estado del antivirus"
+    
+    check_clamav_status
+    check_database_status
+    check_scan_logs
+    check_system_performance
+    generate_summary
+    
+    echo -e "\n${GREEN}✅ Reporte completado${NC}"
+    log_message "Reporte de antivirus completado exitosamente"
+}
+
+# Ejecutar reporte
+main "$@" | tee "$REPORT_FILE"
