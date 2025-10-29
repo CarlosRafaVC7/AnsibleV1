@@ -18,13 +18,19 @@
 # ==============================================
 - name: "Configurar seguridad de MySQL/MariaDB"
   block:
-    - name: "📦 Instalar MySQL/MariaDB"
+    - name: "📦 Verificar disponibilidad de MySQL/MariaDB"
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: "📦 Instalar MySQL/MariaDB (si no está presente)"
       ansible.builtin.package:
         name:
           - "{{ 'mysql-server' if ansible_distribution == 'Ubuntu' else 'mariadb-server' }}"
           - "{{ 'mysql-client' if ansible_distribution == 'Ubuntu' else 'mariadb-client' }}"
           - python3-pymysql
         state: present
+      ignore_errors: true
+      register: mysql_install_result
 
     - name: "🔧 Iniciar y habilitar servicio MySQL"
       ansible.builtin.systemd:

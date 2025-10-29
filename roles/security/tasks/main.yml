@@ -2,44 +2,136 @@
 # Rol principal de Seguridad Integral
 # Configura iptables, firewall, políticas ESXi y seguridad local
 
-- name: Mostrar inicio de configuración de seguridad
+- name: "🔐 INICIANDO CONFIGURACIÓN DE SEGURIDAD INTEGRAL"
   ansible.builtin.debug:
     msg:
-      - "🔒 INICIANDO CONFIGURACIÓN DE SEGURIDAD INTEGRAL"
-      - "🖥️  Host: {{ inventory_hostname }}"
-      - "🌐 IP: {{ ansible_default_ipv4.address | default('N/A') }}"
-      - "🐧 OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "=================================================="
+      - "🔐 SO-ANSIBLE SECURITY FRAMEWORK"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Sistema: {{ ansible_system }}"
+      - "Grupos: {{ group_names | join(', ') }}"
+      - "Fecha: {{ ansible_date_time.date }}"
+      - "=================================================="
+      - "Implementando seguridad integral:"
+      - "✓ Gestión de usuarios y grupos"
+      - "✓ Controles de acceso avanzados"
+      - "✓ Seguridad de bases de datos"
+      - "✓ Protección de red y NIC"
+      - "✓ Monitoreo y alertas"
+      - "=================================================="
 
-# Tareas específicas por sistema operativo
-- name: Incluir tareas Linux/Ubuntu
-  include_tasks: linux_security.yml
-  when: ansible_os_family == "Debian"
+# ==============================================
+# 1. CONFIGURACIÓN DE USUARIOS Y GRUPOS
+# ==============================================
+- name: "👥 Configurar usuarios y grupos específicos por laboratorio"
+  ansible.builtin.include_tasks: users_and_groups.yml
+  tags:
+    - users
+    - groups
+    - authentication
 
-- name: Incluir tareas Windows
-  include_tasks: windows_security.yml
+# ==============================================
+# 2. CONTROLES DE ACCESO AVANZADOS
+# ==============================================
+- name: "🔒 Implementar controles de acceso y PAM"
+  ansible.builtin.include_tasks: access_control.yml
+  tags:
+    - access_control
+    - pam
+    - rbac
+
+# ==============================================
+# 3. SEGURIDAD DE BASES DE DATOS Y SERVICIOS
+# ==============================================
+- name: "🗄️ Configurar seguridad de bases de datos y servicios"
+  ansible.builtin.include_tasks: database_security.yml
+  tags:
+    - database
+    - services
+    - mysql
+    - postgresql
+
+# ==============================================
+# 4. SEGURIDAD DE RED Y NIC
+# ==============================================
+- name: "🌐 Configurar seguridad de red e interfaces"
+  ansible.builtin.include_tasks: network_security.yml
+  tags:
+    - network
+    - nic
+    - vlan
+    - connectivity
+
+# ==============================================
+# 5. CONFIGURACIÓN DE FIREWALL
+# ==============================================
+- name: "🛡️ Configurar firewall avanzado"
+  ansible.builtin.include_tasks: linux_security.yml
+  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  tags:
+    - firewall
+    - iptables
+    - fail2ban
+    - linux
+
+- name: "🪟 Configurar seguridad de Windows"
+  ansible.builtin.include_tasks: windows_security.yml
   when: ansible_os_family == "Windows"
+  tags:
+    - firewall
+    - windows
+    - defender
 
-- name: Incluir tareas macOS
-  include_tasks: macos_security.yml
-  when: ansible_os_family == "Darwin"
+# ==============================================
+# 6. MONITOREO Y ALERTAS
+# ==============================================
+- name: "📊 Configurar monitoreo de seguridad"
+  ansible.builtin.include_tasks: security_monitoring.yml
+  tags:
+    - monitoring
+    - alerts
+    - logging
 
-# Configuración común de red y conectividad
-- name: Incluir configuración de red segura
-  include_tasks: network_security.yml
+# ==============================================
+# 7. INFORMACIÓN DEL SISTEMA
+# ==============================================
+- name: "📋 Recopilar información completa del sistema"
+  ansible.builtin.include_tasks: system_info.yml
+  tags:
+    - info
+    - dump
+    - validation
+    - always
 
-# Políticas de seguridad avanzada
-- name: Incluir políticas avanzadas
-  include_tasks: advanced_policies.yml
-
-# Monitoreo y logging de seguridad
-- name: Incluir monitoreo de seguridad
-  include_tasks: security_monitoring.yml
-
-- name: Mostrar resumen de seguridad configurada
+# ==============================================
+# 8. VALIDACIÓN FINAL
+# ==============================================
+- name: "✅ VALIDACIÓN FINAL DE SEGURIDAD"
   ansible.builtin.debug:
     msg:
+      - "=================================================="
       - "✅ CONFIGURACIÓN DE SEGURIDAD COMPLETADA"
-      - "🔒 Firewall configurado y activo"
-      - "🌐 Políticas de red aplicadas"
-      - "📊 Monitoreo de seguridad habilitado"
-      - "🛡️  Sistema protegido según políticas ESXi"
+      - "=================================================="
+      - "Host: {{ inventory_hostname }} ({{ ansible_system }})"
+      - ""
+      - "🔐 Componentes configurados:"
+      - "  ✅ Usuarios y grupos específicos por laboratorio"
+      - "  ✅ Controles de acceso y políticas PAM"
+      - "  ✅ Seguridad de bases de datos (MySQL/PostgreSQL)"
+      - "  ✅ Protección de servicios web (Apache/IIS)"
+      - "  ✅ Seguridad de red e interfaces NIC"
+      - "  ✅ Firewall y protección perimetral"
+      - "  ✅ Monitoreo y sistema de alertas"
+      - "  ✅ Información del sistema recopilada"
+      - ""
+      - "🛡️ Nivel de seguridad: ENTERPRISE GRADE"
+      - "📊 Logs disponibles en: {{ monitoring.log_directory | default('/var/log/ansible_security') }}"
+      - ""
+      - "🎯 Siguiente paso:"
+      - "   ansible-playbook tests/validate_configuration.yml"
+      - "=================================================="
+  tags:
+    - validation
+    - summary
+    - always

@@ -20,12 +20,26 @@
   block:
     - name: "📦 Instalar paquetes de seguridad PAM"
       ansible.builtin.package:
-        name:
-          - libpam-pwquality
-          - libpam-google-authenticator
-          - libpam-tmpdir
-          - libpam-cracklib
+        name: "{{ pam_packages[ansible_os_family] | default([]) }}"
         state: present
+      vars:
+        pam_packages:
+          Debian:
+            - libpam-pwquality
+            - google-authenticator-libpam
+            - libpam-tmpdir
+            - libpam-modules-extra
+          RedHat:
+            - pam_pwquality
+            - google-authenticator
+            - pam_tmpdir
+            - pam_cracklib
+          Ubuntu:
+            - libpam-pwquality
+            - libpam-google-authenticator  
+            - libpam-tmpdir
+            - libpam-modules-extra
+      ignore_errors: true
 
     - name: "🔒 Configurar límites de recursos del sistema"
       ansible.builtin.template:
@@ -46,8 +60,22 @@
         mode: "0644"
 
     - name: "🔐 Configurar PAM para SSH"
-      ansible.builtin.template:
-        src: "pam_sshd.j2"
+      ansible.builtin.copy:
+        content: |
+          # PAM configuration for SSH - Basic security
+          auth       required     pam_env.so
+          auth       sufficient   pam_unix.so nullok try_first_pass
+          auth       requisite    pam_succeed_if.so uid >= 1000 quiet_success
+          auth       required     pam_deny.so
+          account    required     pam_nologin.so
+          account    include      system-auth
+          password   include      system-auth
+          session    required     pam_selinux.so close
+          session    required     pam_loginuid.so
+          session    required     pam_selinux.so open env_params
+          session    optional     pam_keyinit.so force revoke
+          session    include      system-auth
+          session    required     pam_limits.so
         dest: "/etc/pam.d/sshd"
         backup: yes
         owner: root

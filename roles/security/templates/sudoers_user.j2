@@ -1,5 +1,5 @@
 # Configuración sudo para {{ item.username }}
-# Generado por Ansible - {{ ansible_managed_banner }}
+# Generado por Ansible - {{ ansible_date_time.date }}
 
 {% if item.sudo_nopasswd is defined and item.sudo_nopasswd %}
 # Usuario {{ item.username }} puede ejecutar comandos específicos sin contraseña

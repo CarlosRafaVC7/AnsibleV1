@@ -1,0 +1,19 @@
+# Configuración DNS segura - Generado por Ansible
+# {{ ansible_date_time.date }}
+
+# Servidores DNS primarios (seguros)
+{% for dns_server in network.dns_servers %}
+nameserver {{ dns_server }}
+{% endfor %}
+
+# Configuración de búsqueda
+{% if network.domain is defined %}
+search {{ network.domain }}
+domain {{ network.domain }}
+{% endif %}
+
+# Opciones de seguridad DNS
+options timeout:2
+options attempts:3
+options rotate
+options edns0

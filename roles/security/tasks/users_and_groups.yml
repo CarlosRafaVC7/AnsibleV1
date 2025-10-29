@@ -208,8 +208,8 @@
           - "=== RESUMEN DE USUARIOS CONFIGURADOS ==="
           - "Host: {{ inventory_hostname }}"
           - "Sistema: {{ ansible_system }}"
-          - "Usuarios Linux: {{ linux_users_check.results | length if linux_users_check is defined else 0 }}"
-          - "Usuarios Windows: {{ windows_users_check.results | length if windows_users_check is defined else 0 }}"
+          - "Usuarios Linux: {{ (linux_users_check.results | length) if (linux_users_check is defined and linux_users_check.results is defined) else 0 }}"
+          - "Usuarios Windows: {{ (windows_users_check.results | length) if (windows_users_check is defined and windows_users_check.results is defined) else 0 }}"
           - "Estado: ✅ Configuración completada"
 
   tags:

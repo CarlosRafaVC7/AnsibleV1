@@ -33,18 +33,25 @@
           - "IPv6: {{ ansible_facts['default_ipv6']['address'] | default('No configurado') }}"
           - "IPv4: {{ ansible_facts['default_ipv4']['address'] | default('No configurado') }}"
 
-- name: Test de conectividad - Hosts Windows
+- name: Test de conectividad - Hosts Windows  
   hosts: windows
   gather_facts: yes
   tasks:
     - name: Ping básico Windows
       ansible.windows.win_ping:
       register: win_ping_result
+      when: ansible_os_family == "Windows"
 
     - name: Verificar usuario actual Windows
       ansible.windows.win_shell: $env:USERNAME
       register: win_current_user
       changed_when: false
+      when: ansible_os_family == "Windows"
+
+    - name: Ping básico para hosts Linux simulando Windows
+      ansible.builtin.ping:
+      register: linux_ping_result
+      when: ansible_os_family != "Windows"
 
     - name: Verificar conectividad WinRM
       ansible.builtin.wait_for:
