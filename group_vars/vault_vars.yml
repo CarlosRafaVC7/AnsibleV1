@@ -1,97 +1,30 @@
----
-# Archivo de credenciales seguras - DEBE SER ENCRIPTADO CON ANSIBLE VAULT
-# Para encriptar: ansible-vault encrypt vault_vars.yml
-# Para editar: ansible-vault edit vault_vars.yml
-
-# ==============================================
-# CREDENCIALES DE ADMINISTRADORES
-# ==============================================
-vault_admin_username: "labadmin"
-vault_admin_password: "SecureAdmin2024!"
-vault_admin_email: "admin@lab.local"
-
-# ==============================================
-# CREDENCIALES DE USUARIOS DE LABORATORIO
-# ==============================================
-# Usuario académico
-vault_student_username: "lab_student"
-vault_student_password: "Student2024!Secure"
-vault_student_email: "student@academico.lab.local"
-
-# Usuario gamer
-vault_gamer_username: "gameruser"
-vault_gamer_password: "Gamer2024!Secure"
-vault_gamer_email: "gamer@gaming.lab.local"
-
-# ==============================================
-# CREDENCIALES DE BASE DE DATOS
-# ==============================================
-vault_mysql_root_password: "MySQLRoot2024!Secure"
-vault_mysql_app_password: "MySQLApp2024!Secure"
-vault_postgresql_password: "PostgreSQL2024!Secure"
-
-# Usuarios de BD
-vault_db_admin_user: "dbadmin"
-vault_db_app_user: "appuser"
-
-# ==============================================
-# CREDENCIALES DE ESXI
-# ==============================================
-vault_esxi_username: "root"
-vault_esxi_password: "ESXi2024!Secure"
-vault_esxi_api_user: "ansible_api"
-vault_esxi_api_password: "ESXiAPI2024!Secure"
-
-# ==============================================
-# CLAVES API Y TOKENS
-# ==============================================
-vault_api_key: "ansible-lab-api-key-2024-secure"
-vault_jwt_secret: "jwt-secret-key-2024-very-secure"
-vault_encryption_key: "encryption-key-2024-ultra-secure"
-
-# ==============================================
-# CREDENCIALES DE SERVICIOS
-# ==============================================
-# Servicio de backup
-vault_backup_encryption_key: "backup-encryption-2024-secure"
-vault_backup_remote_user: "backupuser"
-vault_backup_remote_password: "Backup2024!Secure"
-
-# Servicio de monitoreo
-vault_monitoring_api_key: "monitoring-api-2024-secure"
-vault_alerting_webhook: "https://hooks.slack.com/services/secure-webhook"
-
-# Certificados SSL/TLS
-vault_ssl_private_key: |
-  -----BEGIN PRIVATE KEY-----
-  # PLACEHOLDER - Reemplazar con clave real
-  -----END PRIVATE KEY-----
-
-vault_ssl_certificate: |
-  -----BEGIN CERTIFICATE-----
-  # PLACEHOLDER - Reemplazar con certificado real
-  -----END CERTIFICATE-----
-
-# ==============================================
-# CONFIGURACIÓN DE SEGURIDAD AVANZADA
-# ==============================================
-vault_security_salt: "lab-security-salt-2024"
-vault_session_secret: "session-secret-2024-secure"
-vault_csrf_token: "csrf-token-2024-secure"
-
-# ==============================================
-# INSTRUCCIONES DE USO
-# ==============================================
-# 1. Encriptar este archivo:
-#    ansible-vault encrypt group_vars/vault_vars.yml
-# 
-# 2. Usar en playbooks con:
-#    ansible-playbook playbook.yml --ask-vault-pass
-#
-# 3. O con archivo de contraseña:
-#    echo "vault_password" > .vault_pass
-#    chmod 600 .vault_pass
-#    ansible-playbook playbook.yml --vault-password-file .vault_pass
-#
-# 4. Para editar variables:
-#    ansible-vault edit group_vars/vault_vars.yml
+$ANSIBLE_VAULT;1.1;AES256
+33323664336333326534303935613062336430646335323738626533303963306439613235346461
+3738643231616339346336663633383935383662346639330a626566633736386133616364323763
+64363839306334376639346265343331306430356635346535643064393731663766326538643433
+6135353566623737320a613436633066366639376533333764613834386238623132353237343763
+37646138366535383765376666383235373132306231316235363635646266396165363563303534
+39393162386536303631316137656137663664623963616436646433303662343865646435633339
+32346665643533396165356665376562316436396233343064316639626433643762663333626461
+62313764626164343063376236323937346666643931386134336166353336313430363234396161
+37353663343139626530386438633063363261313263396564366466663239663230613238323764
+38656361626239613039613331613236353335333630656466386564306362353530326332303462
+31323936653331633466386461666430656634316565336635383336396230643032666165373265
+62306437656435663638616635346630383839306231363931316466363165636137373033613034
+35616632313961306562613863376164313639613835336362356636393862643937366531303339
+37626433376630613338633237643765343634336635333936386463376431643638316365323666
+34643662663733626363323836663763386563653831333636376539303364356161656334353031
+36656265363332643164653163366538386666336639303738323830636230373630383162323838
+36353461326665313339613166356237653235643736393665643764626539663361356166613532
+31323163663238623635643030386439313061333836376133663262343734616563333764393832
+35643832373031363866643263373335303035353462323332366630386336376537643436656665
+64666234363462383630653665356231626438343332633636336539633639326135323235356665
+65346665333661653361343332343734383930346161316633663836393132653964373763363130
+30656461633364363530646137303366386331383939636566663933346131663637313738663230
+35333638653931376437313530646437326166366164396137373464326561383164363365323831
+35323032303334376432383166613366613864376663616564333832623639303937623232613833
+64396562313132336431323564653862353565386133643533316131323763333634326530336531
+31313037363630636534643862393031306466353431616330616138663463356538643336623835
+34396534613530303630366535323337363339666466626161636338623637353232636139313137
+36366466613961316630656438363830616637633237613362656337323236323230623363333537
+64306331363038616635343365623837613162633037383034646133333363353334

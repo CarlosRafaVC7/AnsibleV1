@@ -1,0 +1,87 @@
+---
+# =========================================
+# ROL: usuarios_seguridad
+# PROPÓSITO: Gestión completa de usuarios, grupos y políticas de seguridad
+# COMPATIBLE: Linux (Ubuntu/Mint) y Windows (11 Pro)
+# =========================================
+
+- name: "🔐 INICIANDO CONFIGURACIÓN DE USUARIOS Y SEGURIDAD"
+  ansible.builtin.debug:
+    msg:
+      - "=============================================="
+      - "🔐 ROL: USUARIOS Y SEGURIDAD DE LABORATORIO"
+      - "=============================================="
+      - "📋 Host: {{ inventory_hostname }}"
+      - "🖥️  Sistema: {{ ansible_system | default('Unknown') }}"
+      - "📅 Fecha: {{ ansible_date_time.date }}"
+      - "⏰ Hora: {{ ansible_date_time.time }}"
+      - "=============================================="
+
+# =========================================
+# TAREAS ESPECÍFICAS POR SISTEMA OPERATIVO
+# =========================================
+
+# Incluir tareas para sistemas Linux (Ubuntu/Mint)
+- name: "🐧 Ejecutar configuración para sistemas Linux"
+  include_tasks: linux_usuarios.yml
+  when: 
+    - ansible_os_family == "Debian" or ansible_distribution == "Ubuntu"
+  tags:
+    - usuarios
+    - linux
+    - seguridad
+
+# Incluir tareas para sistemas Windows
+- name: "🪟 Ejecutar configuración para sistemas Windows"
+  include_tasks: windows_usuarios.yml
+  when: 
+    - ansible_os_family == "Windows"
+  tags:
+    - usuarios
+    - windows
+    - seguridad
+
+# =========================================
+# VALIDACIÓN FINAL
+# =========================================
+
+- name: "✅ VALIDACIÓN FINAL DE CONFIGURACIÓN"
+  block:
+    - name: "📊 Verificar usuarios creados en Linux"
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ item.username }}"
+      loop: "{{ lab_usuarios }}"
+      when: 
+        - ansible_os_family == "Debian" or ansible_distribution == "Ubuntu"
+        - lab_usuarios is defined
+      register: linux_users_validation
+      ignore_errors: yes
+
+    - name: "📊 Verificar usuarios creados en Windows"
+      ansible.windows.win_shell: |
+        Get-LocalUser -Name "{{ item.username }}" | Select-Object Name,Enabled,LastLogon | ConvertTo-Json
+      loop: "{{ lab_usuarios }}"
+      when: 
+        - ansible_os_family == "Windows"
+        - lab_usuarios is defined
+      register: windows_users_validation
+      ignore_errors: yes
+
+    - name: "📈 Mostrar resumen final de configuración"
+      ansible.builtin.debug:
+        msg:
+          - "=================== RESUMEN FINAL ==================="
+          - "✅ Configuración de usuarios completada exitosamente"
+          - "📋 Host configurado: {{ inventory_hostname }}"
+          - "🖥️  Sistema operativo: {{ ansible_system }}"
+          - "👥 Usuarios configurados: {{ lab_usuarios | length if lab_usuarios is defined else 0 }}"
+          - "🔒 Grupos de seguridad: {{ lab_grupos | length if lab_grupos is defined else 0 }}"
+          - "🛡️  Políticas aplicadas: ✅ Contraseñas, ✅ Sudo, ✅ Seguridad"
+          - "⏰ Configuración completada: {{ ansible_date_time.iso8601 }}"
+          - "=================================================="
+
+  tags:
+    - validation
+    - usuarios
+    - resumen

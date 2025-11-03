@@ -1,0 +1,118 @@
+---
+# =========================================
+# PLAYBOOK DE EJEMPLO: USUARIOS Y SEGURIDAD
+# Propósito: Implementar usuarios y firewall en laboratorio
+# Uso: ansible-playbook -i inventory/hosts.ini playbooks/setup_usuarios_firewall.yml --ask-vault-pass
+# =========================================
+
+- name: "🔐 CONFIGURAR USUARIOS Y SEGURIDAD DEL LABORATORIO"
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  vars:
+    # ===== VARIABLES DE VAULT (ENCRIPTADAS) =====
+    vault_labadmin_password: "{{ vault_admin_password | default('LabAdmin2024!Secure') }}"
+    vault_student_password: "{{ vault_student_password | default('Student2024!Lab') }}"
+    vault_practice_password: "{{ vault_practice_password | default('Practice2024!Web') }}"
+  
+  pre_tasks:
+    - name: "📋 Mostrar información del sistema"
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "🔐 CONFIGURACIÓN DE USUARIOS Y SEGURIDAD"
+          - "=============================================="
+          - "🖥️  Host: {{ inventory_hostname }}"
+          - "📋 Sistema: {{ ansible_system }} {{ ansible_distribution | default('') }}"
+          - "🌐 IP: {{ ansible_default_ipv4.address | default('DHCPv6') }}"
+          - "⏰ Fecha: {{ ansible_date_time.iso8601 }}"
+          - "=============================================="
+    
+    - name: "🔄 Actualizar cache de paquetes"
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 300
+      when: ansible_os_family == "Debian"
+      ignore_errors: true
+
+  roles:
+    # ===== ROL 1: CONFIGURACIÓN DE USUARIOS Y GRUPOS =====
+    - name: usuarios_seguridad
+      tags:
+        - usuarios
+        - grupos
+        - sudo
+        - politicas
+    
+    # ===== ROL 2: CONFIGURACIÓN DE FIREWALL Y ANTIVIRUS =====  
+    - name: seguridad_firewall
+      tags:
+        - firewall
+        - antivirus
+        - fail2ban
+        - red
+        - dhcpv6
+
+  post_tasks:
+    - name: "✅ RESUMEN FINAL DE CONFIGURACIÓN"
+      ansible.builtin.debug:
+        msg:
+          - "==============================================="
+          - "✅ CONFIGURACIÓN COMPLETADA EXITOSAMENTE"
+          - "==============================================="
+          - "👥 Usuarios creados:"
+          - "   • labadmin (sudo completo sin contraseña)"
+          - "   • lab_student (sudo limitado con contraseña)"
+          - "   • practice_user (solo servicios web)"
+          - ""
+          - "🔒 Grupos configurados:"
+          - "   • students, practice, academic_admin, lab_developers"
+          - ""
+          - "🔥 Firewall configurado:"
+          - "   • SSH(22) - Solo desde 192.168.1.0/24"
+          - "   • HTTP(80) y HTTPS(443) - Permitidos"
+          - "   • Puertos peligrosos - Bloqueados"
+          - ""
+          - "🦠 Antivirus:"
+          - "   • Linux: ClamAV activo con escaneo nocturno"
+          - "   • Windows: Defender optimizado"
+          - ""
+          - "🛡️  Protecciones adicionales:"
+          - "   • Fail2ban para SSH (Linux)"
+          - "   • Políticas de contraseñas seguras"
+          - "   • Cuentas root/guest deshabilitadas"
+          - "   • Red DHCPv6 con IPv4 fallback"
+          - ""
+          - "📋 Host: {{ inventory_hostname }}"
+          - "⏰ Finalizado: {{ ansible_date_time.iso8601 }}"
+          - "==============================================="
+
+    - name: "🔍 Verificar servicios críticos"
+      ansible.builtin.shell: |
+        {% if ansible_os_family == "Debian" %}
+        echo "=== Servicios Linux ==="
+        systemctl is-active ufw || echo "UFW: Revisar"
+        systemctl is-active clamav-daemon || echo "ClamAV: Revisar"
+        systemctl is-active fail2ban || echo "Fail2ban: Revisar"
+        {% elif ansible_os_family == "Windows" %}
+        echo "=== Servicios Windows ==="
+        Get-Service -Name "mpssvc" | Select-Object Status
+        Get-MpComputerStatus | Select-Object AntivirusEnabled
+        {% endif %}
+      register: services_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: "📊 Mostrar estado de servicios"
+      ansible.builtin.debug:
+        var: services_check.stdout_lines
+      when: services_check.stdout_lines is defined
+
+# =========================================
+# TAGS DISPONIBLES PARA EJECUCIÓN PARCIAL
+# =========================================
+# ansible-playbook setup_usuarios_firewall.yml --tags "usuarios"
+# ansible-playbook setup_usuarios_firewall.yml --tags "firewall"
+# ansible-playbook setup_usuarios_firewall.yml --tags "antivirus"
+# ansible-playbook setup_usuarios_firewall.yml --tags "red"

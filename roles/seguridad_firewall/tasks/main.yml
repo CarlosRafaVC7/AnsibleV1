@@ -1,0 +1,114 @@
+---
+# =========================================
+# ROL: seguridad_firewall
+# PROPÓSITO: Configuración completa de firewall, antivirus y red
+# COMPATIBLE: Linux (Ubuntu/Mint) y Windows (11 Pro)
+# =========================================
+
+- name: "🔥 INICIANDO CONFIGURACIÓN DE SEGURIDAD Y FIREWALL"
+  ansible.builtin.debug:
+    msg:
+      - "=============================================="
+      - "🔥 ROL: SEGURIDAD FIREWALL Y ANTIVIRUS"
+      - "=============================================="
+      - "📋 Host: {{ inventory_hostname }}"
+      - "🖥️  Sistema: {{ ansible_system | default('Unknown') }}"
+      - "🌐 IP Actual: {{ ansible_default_ipv4.address | default('DHCPv6') }}"
+      - "📅 Fecha: {{ ansible_date_time.date }}"
+      - "⏰ Hora: {{ ansible_date_time.time }}"
+      - "=============================================="
+
+# =========================================
+# TAREAS ESPECÍFICAS POR SISTEMA OPERATIVO
+# =========================================
+
+# Configuración para sistemas Linux (Ubuntu/Mint)
+- name: "🐧 Ejecutar configuración de seguridad Linux"
+  include_tasks: linux_firewall.yml
+  when: 
+    - ansible_os_family == "Debian" or ansible_distribution == "Ubuntu"
+  tags:
+    - firewall
+    - linux
+    - seguridad
+    - antivirus
+
+# Configuración para sistemas Windows
+- name: "🪟 Ejecutar configuración de seguridad Windows"
+  include_tasks: windows_firewall.yml
+  when: 
+    - ansible_os_family == "Windows"
+  tags:
+    - firewall
+    - windows
+    - seguridad
+    - antivirus
+
+# =========================================
+# CONFIGURACIÓN DE RED COMÚN (DHCPv6)
+# =========================================
+
+- name: "🌐 Configurar red DHCPv6 y conectividad"
+  include_tasks: network_config.yml
+  tags:
+    - red
+    - dhcpv6
+    - conectividad
+
+# =========================================
+# VALIDACIÓN FINAL Y PRUEBAS
+# =========================================
+
+- name: "✅ VALIDACIÓN FINAL DE SEGURIDAD"
+  block:
+    - name: "🔍 Verificar estado del firewall"
+      ansible.builtin.shell: |
+        {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+        ufw status verbose
+        {% elif ansible_os_family == "Windows" %}
+        netsh advfirewall show allprofiles | findstr "State"
+        {% endif %}
+      register: firewall_status
+      changed_when: false
+      ignore_errors: true
+
+    - name: "🦠 Verificar estado del antivirus"
+      ansible.builtin.shell: |
+        {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+        systemctl is-active clamav-daemon || echo "ClamAV no activo"
+        {% elif ansible_os_family == "Windows" %}
+        Get-MpComputerStatus | Select-Object AntivirusEnabled,RealTimeProtectionEnabled | ConvertTo-Json -Compress
+        {% endif %}
+      register: antivirus_status
+      changed_when: false
+      ignore_errors: true
+
+    - name: "🌐 Verificar configuración de red"
+      ansible.builtin.shell: |
+        {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+        ip addr show | grep -E "(inet6|inet)" | head -5
+        {% elif ansible_os_family == "Windows" %}
+        Get-NetIPAddress | Where-Object {$_.AddressFamily -eq "IPv6" -or $_.AddressFamily -eq "IPv4"} | Select-Object IPAddress,InterfaceAlias | ConvertTo-Json -Compress
+        {% endif %}
+      register: network_status
+      changed_when: false
+      ignore_errors: true
+
+    - name: "📊 MOSTRAR RESUMEN FINAL DE SEGURIDAD"
+      ansible.builtin.debug:
+        msg:
+          - "=================== RESUMEN FINAL DE SEGURIDAD ==================="
+          - "✅ Configuración completada en: {{ inventory_hostname }}"
+          - "🖥️  Sistema: {{ ansible_system }} {{ ansible_distribution | default('') }}"
+          - "🔥 Firewall: {{ 'ACTIVO' if firewall_status.rc == 0 else 'REVISAR' }}"
+          - "🦠 Antivirus: {{ 'ACTIVO' if antivirus_status.rc == 0 else 'REVISAR' }}"
+          - "🌐 Red: {{ 'CONFIGURADA' if network_status.rc == 0 else 'REVISAR' }}"
+          - "🛡️  Fail2ban: {{ 'ACTIVO (Linux)' if ansible_os_family == 'Debian' else 'N/A (Windows)' }}"
+          - "📋 Puertos seguros: SSH(22), HTTP(80), HTTPS(443)"
+          - "🚫 Política por defecto: DENEGAR TODO excepto permitidos"
+          - "⏰ Configuración finalizada: {{ ansible_date_time.iso8601 }}"
+          - "================================================================="
+
+  tags:
+    - validation
+    - resumen

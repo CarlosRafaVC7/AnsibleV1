@@ -1,0 +1,80 @@
+# =============================================================================
+# Laboratorio ESXi - Inventory generado automáticamente
+# Generado: {{ ansible_date_time.iso8601 }}
+# ESXi: {{ esxi_host }}:{{ esxi_port }}
+# =============================================================================
+
+# Laboratorio Académico (Linux Mint)
+[academico]
+# ACTUALIZAR con IP real después de instalar Linux Mint
+{% for vm in lab_vms %}
+{% if 'Linux' in vm.item.name or 'Mint' in vm.item.name %}
+{{ vm.instance.ipv4 | default('192.168.1.100') }} ansible_user=mint ansible_ssh_private_key_file=~/.ssh/id_ed25519_ansible
+{% endif %}
+{% endfor %}
+
+# Laboratorio Gamer (Windows 10)
+[gamer]
+# ACTUALIZAR con IP real después de instalar Windows 10
+{% for vm in lab_vms %}
+{% if 'Windows' in vm.item.name or 'Gamer' in vm.item.name %}
+{{ vm.instance.ipv4 | default('192.168.1.101') }} ansible_user=Administrador ansible_password='Upeu2025#' ansible_connection=winrm ansible_winrm_transport=ntlm ansible_port=5985 ansible_winrm_server_cert_validation=ignore
+{% endif %}
+{% endfor %}
+
+# Control node local
+[local]
+127.0.0.1 ansible_connection=local ansible_user={{ ansible_env.USER | default('carlos') }} ansible_python_interpreter=/usr/bin/python3
+
+# =============================================================================
+# Grupos por entorno de infraestructura
+# =============================================================================
+
+# VMs en VMware ESXi (laboratorio remoto)
+[esxi:children]
+academico
+gamer
+
+# Todos los sistemas Linux
+[linux:children]
+academico
+local
+
+# Todos los sistemas Windows
+[windows:children]
+gamer
+
+# Todos los hosts gestionados
+[managed:children]
+esxi
+local
+
+# =============================================================================
+# Variables globales
+# =============================================================================
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+
+# Variables para ESXi VMs
+[esxi:vars]
+# Configuración de red ESXi
+esxi_host={{ esxi_host }}
+esxi_port={{ esxi_port }}
+datastore={{ ds_name }}
+
+# Configuración de logging
+ansible_log_path=/tmp/ansible.log
+
+# Configuración de timeout
+ansible_timeout=300
+
+# =============================================================================
+# Información de VMs creadas
+# =============================================================================
+{% for vm in lab_vms %}
+# VM: {{ vm.item.name }}
+# Estado: {{ vm.instance.hw_power_status | default('Creada') }}
+# MAC: {{ vm.instance.hw_eth0.macaddress | default('N/A') }}
+# ISO: {{ vm.item.iso_path }}
+# Specs: {{ vm.item.memory_mb }}MB RAM, {{ vm.item.num_cpus }} CPU, {{ vm.item.disk_gb }}GB
+{% endfor %}

@@ -1,0 +1,115 @@
+# =========================================
+# CONFIGURACIÓN SUDOERS PARA LABORATORIO
+# Generado automáticamente por Ansible
+# Fecha: {{ ansible_date_time.iso8601 }}
+# Host: {{ inventory_hostname }}
+# =========================================
+
+# Configuración por defecto
+Defaults        env_reset
+Defaults        mail_badpass
+Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults        logfile="/var/log/sudo.log"
+Defaults        log_input, log_output
+Defaults        passwd_timeout=5
+Defaults        passwd_tries=3
+
+# =========================================
+# USUARIOS CON PRIVILEGIOS ADMINISTRATIVOS COMPLETOS
+# =========================================
+{% for usuario in lab_usuarios %}
+{% if usuario.sudo_config == 'full' %}
+# {{ usuario.fullname }} - Administrador completo
+{{ usuario.username }}    ALL=(ALL:ALL) NOPASSWD:ALL
+{% endif %}
+{% endfor %}
+
+# =========================================
+# USUARIOS CON PRIVILEGIOS LIMITADOS
+# =========================================
+{% for usuario in lab_usuarios %}
+{% if usuario.sudo_config == 'limited' %}
+# {{ usuario.fullname }} - Privilegios limitados para educación
+{{ usuario.username }}    ALL=(ALL) PASSWD: /usr/bin/systemctl status *, \
+                                           /usr/bin/systemctl start apache2, \
+                                           /usr/bin/systemctl stop apache2, \
+                                           /usr/bin/systemctl restart apache2, \
+                                           /usr/bin/systemctl reload apache2, \
+                                           /usr/bin/systemctl start mysql, \
+                                           /usr/bin/systemctl stop mysql, \
+                                           /usr/bin/systemctl restart mysql, \
+                                           /usr/bin/apt update, \
+                                           /usr/bin/apt list --upgradable, \
+                                           /usr/bin/tail /var/log/apache2/*, \
+                                           /usr/bin/tail /var/log/mysql/*, \
+                                           /usr/bin/ls /var/log/*, \
+                                           /usr/bin/cat /var/log/syslog
+
+{% endif %}
+{% endfor %}
+
+# =========================================
+# USUARIOS PARA SERVICIOS WEB ÚNICAMENTE
+# =========================================
+{% for usuario in lab_usuarios %}
+{% if usuario.sudo_config == 'web_service' %}
+# {{ usuario.fullname }} - Solo servicios web
+{{ usuario.username }}    ALL=(ALL) NOPASSWD: /usr/bin/systemctl status apache2, \
+                                             /usr/bin/systemctl start apache2, \
+                                             /usr/bin/systemctl stop apache2, \
+                                             /usr/bin/systemctl restart apache2, \
+                                             /usr/bin/systemctl reload apache2, \
+                                             /usr/bin/systemctl status nginx, \
+                                             /usr/bin/systemctl start nginx, \
+                                             /usr/bin/systemctl stop nginx, \
+                                             /usr/bin/systemctl restart nginx, \
+                                             /usr/bin/systemctl reload nginx
+
+{% endif %}
+{% endfor %}
+
+# =========================================
+# CONFIGURACIÓN DE GRUPOS
+# =========================================
+
+# Grupo de administradores académicos
+%academic_admin ALL=(ALL:ALL) ALL
+
+# Grupo de estudiantes - comandos básicos únicamente
+%students ALL=(ALL) PASSWD: /usr/bin/systemctl status *, \
+                           /usr/bin/ps aux, \
+                           /usr/bin/top, \
+                           /usr/bin/htop, \
+                           /usr/bin/df -h, \
+                           /usr/bin/free -h, \
+                           /usr/bin/uptime
+
+# Grupo de desarrolladores - herramientas de desarrollo
+%lab_developers ALL=(ALL) PASSWD: /usr/bin/systemctl * apache2, \
+                                 /usr/bin/systemctl * mysql, \
+                                 /usr/bin/systemctl * nginx, \
+                                 /usr/bin/docker *, \
+                                 /usr/bin/docker-compose *, \
+                                 /usr/bin/git *, \
+                                 /usr/bin/npm *, \
+                                 /usr/bin/pip3 *
+
+# =========================================
+# RESTRICCIONES DE SEGURIDAD
+# =========================================
+
+# Prohibir comandos peligrosos para todos los usuarios
+ALL ALL = !/usr/bin/su, !/usr/bin/sudo su *, !/bin/sh, !/bin/bash, !/bin/dash, !/bin/zsh, \
+          !/usr/bin/passwd root, !/usr/bin/passwd {{ ansible_user | default('ansible') }}, \
+          !/usr/sbin/visudo, !/usr/bin/chmod 777 *, !/usr/bin/chown root *, \
+          !/bin/rm -rf /, !/usr/bin/rm -rf /, !/usr/bin/dd *
+
+# =========================================
+# LOGGING Y AUDITORÍA
+# =========================================
+
+# Registrar todos los comandos sudo
+Defaults        log_host, log_year, logfile="/var/log/sudo.log"
+Defaults        syslog=auth
+Defaults        syslog_goodpri=info
+Defaults        syslog_badpri=alert

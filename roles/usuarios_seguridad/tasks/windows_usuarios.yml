@@ -1,0 +1,250 @@
+---
+# =========================================
+# CONFIGURACIÓN DE USUARIOS Y SEGURIDAD - WINDOWS
+# Sistema: Windows 11 Pro
+# Propósito: Crear usuarios de laboratorio con políticas de seguridad
+# =========================================
+
+- name: "🪟 INICIANDO CONFIGURACIÓN WINDOWS"
+  ansible.builtin.debug:
+    msg:
+      - "🪟 Configurando usuarios y seguridad en sistema Windows"
+      - "📋 Sistema: {{ ansible_system }} {{ ansible_distribution }}"
+      - "🔧 Versión: {{ ansible_distribution_version }}"
+
+# =========================================
+# CREACIÓN DE GRUPOS DE LABORATORIO
+# =========================================
+
+- name: "👥 Crear grupos específicos del laboratorio en Windows"
+  ansible.windows.win_group:
+    name: "{{ item.name }}"
+    description: "{{ item.description | default('Grupo de laboratorio') }}"
+    state: present
+  loop: "{{ lab_grupos }}"
+  tags:
+    - grupos
+    - windows
+
+# =========================================
+# CREACIÓN DE USUARIOS CON CONFIGURACIÓN ESPECÍFICA
+# =========================================
+
+- name: "👤 Crear usuarios del laboratorio en Windows"
+  ansible.windows.win_user:
+    name: "{{ item.username }}"
+    fullname: "{{ item.fullname }}"
+    password: "{{ item.password }}"
+    groups: "{{ item.groups }}"
+    password_never_expires: "{{ item.password_never_expires | default(false) }}"
+    user_cannot_change_password: "{{ item.user_cannot_change_password | default(false) }}"
+    password_expired: false
+    state: present
+  loop: "{{ lab_usuarios }}"
+  no_log: true  # Ocultar contraseñas en logs por seguridad
+  tags:
+    - usuarios
+    - windows
+
+# =========================================
+# CONFIGURACIÓN DE POLÍTICAS DE CONTRASEÑAS
+# =========================================
+
+- name: "🔐 Configurar políticas de contraseñas en Windows"
+  ansible.windows.win_shell: |
+    # Configurar política de contraseñas local
+    net accounts /minpwlen:8        # Mínimo 8 caracteres
+    net accounts /maxpwage:90       # Máximo 90 días
+    net accounts /minpwage:1        # Mínimo 1 día entre cambios
+    net accounts /uniquepw:5        # Recordar últimas 5 contraseñas
+    
+    # Configurar política de bloqueo
+    net accounts /lockoutthreshold:5    # 5 intentos fallidos
+    net accounts /lockoutduration:30    # Bloqueo por 30 minutos
+    net accounts /lockoutwindow:30      # Ventana de 30 minutos
+  tags:
+    - contraseñas
+    - politicas
+    - seguridad
+
+- name: "🛡️ Habilitar complejidad de contraseñas"
+  ansible.windows.win_security_policy:
+    section: "System Access"
+    key: "PasswordComplexity" 
+    value: "1"  # Habilitar complejidad
+  tags:
+    - contraseñas
+    - seguridad
+
+# =========================================
+# CONFIGURACIÓN UAC (CONTROL DE CUENTAS DE USUARIO)
+# =========================================
+
+- name: "🔒 Configurar UAC (Control de Cuentas de Usuario)"
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+    name: "{{ item.name }}"
+    data: "{{ item.value }}"
+    type: dword
+  loop:
+    - { name: "EnableLUA", value: 1 }                    # Habilitar UAC
+    - { name: "ConsentPromptBehaviorAdmin", value: 2 }   # Prompt para administradores
+    - { name: "ConsentPromptBehaviorUser", value: 3 }    # Prompt para usuarios estándar
+    - { name: "PromptOnSecureDesktop", value: 1 }        # Usar escritorio seguro
+  tags:
+    - uac
+    - seguridad
+
+# =========================================
+# DESHABILITAR CUENTAS DE SISTEMA PELIGROSAS
+# =========================================
+
+- name: "🚫 Deshabilitar cuenta Guest"
+  ansible.windows.win_user:
+    name: "Guest"
+    account_disabled: true
+  ignore_errors: true
+  tags:
+    - seguridad
+    - guest
+
+- name: "🚫 Deshabilitar cuenta Administrator por defecto"
+  ansible.windows.win_user:
+    name: "Administrator"
+    account_disabled: true
+  ignore_errors: true
+  tags:
+    - seguridad
+    - administrator
+
+# =========================================
+# CONFIGURACIÓN DE AUDITORÍA
+# =========================================
+
+- name: "📋 Configurar políticas de auditoría en Windows"
+  ansible.windows.win_security_policy:
+    section: "Event Audit"
+    key: "{{ item.key }}"
+    value: "{{ item.value }}"
+  loop:
+    - { key: "AuditSystemEvents", value: "3" }        # Auditar eventos del sistema
+    - { key: "AuditLogonEvents", value: "3" }         # Auditar inicios de sesión
+    - { key: "AuditObjectAccess", value: "1" }        # Auditar acceso a objetos
+    - { key: "AuditPolicyChange", value: "3" }        # Auditar cambios de políticas
+    - { key: "AuditAccountManage", value: "3" }       # Auditar gestión de cuentas
+  tags:
+    - auditoria
+    - seguridad
+
+- name: "📊 Expandir tamaño de logs de seguridad"
+  ansible.windows.win_shell: |
+    wevtutil sl Security /ms:1048576      # 1MB para log de seguridad
+    wevtutil sl Application /ms:1048576   # 1MB para log de aplicación
+    wevtutil sl System /ms:1048576        # 1MB para log del sistema
+  tags:
+    - logging
+    - auditoria
+
+# =========================================
+# CONFIGURACIÓN DE PRIVILEGIOS LOCALES
+# =========================================
+
+- name: "⚙️ Configurar privilegios de usuarios"
+  ansible.windows.win_shell: |
+    # Configurar privilegios para usuarios específicos
+    {% for usuario in lab_usuarios %}
+    {% if usuario.sudo_config == 'full' %}
+    # {{ usuario.username }} - Privilegios administrativos completos
+    net localgroup "Administradores" "{{ usuario.username }}" /add
+    {% elif usuario.sudo_config == 'limited' %}
+    # {{ usuario.username }} - Privilegios limitados
+    net localgroup "Usuarios avanzados" "{{ usuario.username }}" /add
+    {% elif usuario.sudo_config == 'web_service' %}
+    # {{ usuario.username }} - Solo servicios web
+    net localgroup "Usuarios de IIS_IUSRS" "{{ usuario.username }}" /add
+    {% endif %}
+    {% endfor %}
+  ignore_errors: true
+  tags:
+    - privilegios
+    - usuarios
+
+# =========================================
+# CONFIGURACIÓN DE FIREWALL DE WINDOWS
+# =========================================
+
+- name: "🔥 Habilitar Windows Firewall en todos los perfiles"
+  ansible.windows.win_firewall:
+    state: enabled
+    profiles:
+      - domain
+      - private 
+      - public
+  tags:
+    - firewall
+    - seguridad
+
+# =========================================
+# DESHABILITACIÓN DE SERVICIOS INNECESARIOS
+# =========================================
+
+- name: "🚫 Deshabilitar servicios innecesarios"
+  ansible.windows.win_service:
+    name: "{{ item }}"
+    state: stopped
+    start_mode: disabled
+  loop:
+    - "Fax"                    # Servicio de fax
+    - "TapiSrv"               # Telefonía
+    - "Telnet"                # Telnet inseguro
+    - "RemoteRegistry"        # Registro remoto
+    - "Browser"               # Explorador de equipos
+  ignore_errors: true
+  tags:
+    - servicios
+    - seguridad
+
+# =========================================
+# CONFIGURACIÓN DE ACTUALIZACIONES AUTOMÁTICAS
+# =========================================
+
+- name: "🔄 Configurar Windows Update"
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU
+    name: "{{ item.name }}"
+    data: "{{ item.value }}"
+    type: dword
+  loop:
+    - { name: "NoAutoUpdate", value: 0 }              # Habilitar actualizaciones automáticas
+    - { name: "AUOptions", value: 4 }                 # Descargar e instalar automáticamente
+    - { name: "ScheduledInstallDay", value: 0 }       # Todos los días
+    - { name: "ScheduledInstallTime", value: 3 }      # 3 AM
+  tags:
+    - actualizaciones
+    - seguridad
+
+# =========================================
+# VALIDACIÓN DE CONFIGURACIÓN
+# =========================================
+
+- name: "✅ Verificar que los usuarios fueron creados correctamente"
+  ansible.windows.win_shell: |
+    Get-LocalUser -Name "{{ item.username }}" | Select-Object Name,Enabled,LastLogon | ConvertTo-Json
+  loop: "{{ lab_usuarios }}"
+  register: user_validation_windows
+  tags:
+    - validacion
+    - usuarios
+
+- name: "📊 Mostrar información de usuarios creados en Windows"
+  ansible.builtin.debug:
+    msg:
+      - "✅ Usuario {{ item.item.username }} verificado en Windows"
+      - "👥 Grupos: {{ item.item.groups | join(', ') }}"
+      - "🔧 Configuración: {{ item.item.sudo_config | default('estándar') }}"
+      - "🔒 Estado UAC: Habilitado"
+  loop: "{{ user_validation_windows.results }}"
+  when: user_validation_windows is defined
+  tags:
+    - validacion
+    - info

@@ -1,0 +1,45 @@
+# =========================================
+# CONFIGURACIÓN DE CALIDAD DE CONTRASEÑAS
+# Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}
+# Generado por Ansible: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+# Longitud mínima de contraseña
+minlen = 8
+
+# Clases de caracteres mínimas requeridas
+minclass = 3
+
+# Número máximo de caracteres consecutivos del mismo tipo
+maxsequence = 3
+
+# Número máximo de caracteres repetidos
+maxrepeat = 2
+
+# Verificar si la contraseña contiene el nombre de usuario
+usercheck = 1
+
+# Verificar si la contraseña contiene palabras del diccionario
+dictcheck = 1
+
+# Puntaje mínimo requerido (0-100)
+minlen = 8
+dcredit = -1    # Al menos 1 dígito
+ucredit = -1    # Al menos 1 mayúscula  
+lcredit = -1    # Al menos 1 minúscula
+ocredit = -1    # Al menos 1 carácter especial
+
+# Verificaciones adicionales de seguridad
+enforcing = 1   # Hacer cumplir las reglas
+retry = 3       # Número de reintentos
+gecoscheck = 1  # Verificar contra información GECOS
+
+# Prohibir contraseñas basadas en información del usuario
+usersubstr = 3  # Máximo 3 caracteres consecutivos del username
+
+# Configuración específica del laboratorio
+# Prohibir contraseñas comunes de laboratorio
+badwords = lab laboratory admin student practice test 123456 password qwerty
+
+# Configuración de historial (se maneja también en /etc/login.defs)
+remember = 5    # Recordar últimas 5 contraseñas

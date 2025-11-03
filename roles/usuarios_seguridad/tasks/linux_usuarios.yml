@@ -1,0 +1,257 @@
+---
+# =========================================
+# CONFIGURACIÓN DE USUARIOS Y SEGURIDAD - LINUX
+# Sistema: Ubuntu/Mint
+# Propósito: Crear usuarios de laboratorio con políticas de seguridad
+# =========================================
+
+- name: "🐧 INICIANDO CONFIGURACIÓN LINUX"
+  ansible.builtin.debug:
+    msg:
+      - "🐧 Configurando usuarios y seguridad en sistema Linux"
+      - "📋 Distribución: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "🔧 Arquitectura: {{ ansible_architecture }}"
+
+# =========================================
+# INSTALACIÓN DE PAQUETES NECESARIOS
+# =========================================
+
+- name: "📦 Instalar paquetes necesarios para gestión de usuarios"
+  ansible.builtin.apt:
+    name:
+      - passwd          # Gestión de contraseñas
+      - sudo           # Privilegios administrativos
+      - adduser        # Creación de usuarios
+      - libpam-pwquality  # Políticas de contraseñas
+      - cron           # Tareas programadas
+    state: present
+    update_cache: true
+  become: true
+  tags:
+    - paquetes
+    - seguridad
+
+# =========================================
+# CREACIÓN DE GRUPOS DE LABORATORIO
+# =========================================
+
+- name: "👥 Crear grupos específicos del laboratorio"
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid | default(omit) }}"
+    state: present
+  loop: "{{ lab_grupos }}"
+  become: true
+  tags:
+    - grupos
+
+# =========================================
+# CREACIÓN DE USUARIOS CON CONFIGURACIÓN ESPECÍFICA
+# =========================================
+
+- name: "👤 Crear usuarios del laboratorio"
+  ansible.builtin.user:
+    name: "{{ item.username }}"
+    comment: "{{ item.fullname }}"
+    groups: "{{ item.groups | join(',') }}"
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    password: "{{ item.password | password_hash('sha512') }}"
+    create_home: yes
+    home: "/home/{{ item.username }}"
+    state: present
+    # Configurar expiración de contraseña (90 días)
+    password_expire_max: 90
+  loop: "{{ lab_usuarios }}"
+  become: true
+  no_log: true  # Ocultar contraseñas en logs por seguridad
+  tags:
+    - usuarios
+
+# =========================================
+# CONFIGURACIÓN DE PERMISOS DE DIRECTORIOS HOME
+# =========================================
+
+- name: "🏠 Configurar permisos de directorios home"
+  ansible.builtin.file:
+    path: "/home/{{ item.username }}"
+    mode: "{{ item.home_permissions | default('0755') }}"
+    owner: "{{ item.username }}"
+    group: "{{ item.username }}"
+  loop: "{{ lab_usuarios }}"
+  become: true
+  tags:
+    - permisos
+    - usuarios
+
+# =========================================
+# CONFIGURACIÓN DE SUDO PERSONALIZADA
+# =========================================
+
+- name: "⚙️ Configurar sudoers personalizado desde plantilla"
+  ansible.builtin.template:
+    src: sudoers_lab.j2
+    dest: "/etc/sudoers.d/lab_users"
+    mode: "0440"
+    owner: root
+    group: root
+    validate: '/usr/sbin/visudo -cf %s'  # Validar sintaxis antes de aplicar
+  become: true
+  tags:
+    - sudo
+    - seguridad
+
+- name: "🛡️ Configurar sudo individual para usuarios específicos"
+  ansible.builtin.template:
+    src: sudoers_individual.j2
+    dest: "/etc/sudoers.d/{{ item.username }}"
+    mode: "0440"
+    owner: root
+    group: root
+    validate: '/usr/sbin/visudo -cf %s'
+  loop: "{{ lab_usuarios }}"
+  when: 
+    - item.sudo_config is defined
+    - item.sudo_config != "none"
+  become: true
+  tags:
+    - sudo
+    - usuarios
+
+# =========================================
+# POLÍTICAS DE CONTRASEÑAS SEGURAS
+# =========================================
+
+- name: "🔐 Configurar políticas de contraseñas seguras"
+  ansible.builtin.template:
+    src: pwquality.conf.j2
+    dest: "/etc/security/pwquality.conf"
+    backup: yes
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: restart_pam_services
+  tags:
+    - contraseñas
+    - seguridad
+
+- name: "⏰ Configurar expiración de contraseñas en login.defs"
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^{{ item.param }}"
+    line: "{{ item.param }}	{{ item.value }}"
+    backup: yes
+  loop:
+    - { param: "PASS_MAX_DAYS", value: "90" }     # Máximo 90 días
+    - { param: "PASS_MIN_DAYS", value: "1" }      # Mínimo 1 día entre cambios
+    - { param: "PASS_WARN_AGE", value: "7" }      # Advertir 7 días antes
+    - { param: "PASS_MIN_LEN", value: "8" }       # Mínimo 8 caracteres
+  become: true
+  tags:
+    - contraseñas
+    - politicas
+
+# =========================================
+# DESHABILITAR CUENTAS DE SISTEMA PELIGROSAS
+# =========================================
+
+- name: "🚫 Deshabilitar cuenta root para login SSH"
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+    backup: true
+  become: true
+  notify: restart_ssh
+  tags:
+    - ssh
+    - seguridad
+
+- name: "🔒 Bloquear cuenta root (mantener solo para sudo)"
+  ansible.builtin.user:
+    name: root
+    password_lock: true  # Bloquear password pero mantener cuenta
+  become: true
+  tags:
+    - seguridad
+    - root
+
+- name: "🚫 Deshabilitar cuenta guest (si existe)"
+  ansible.builtin.user:
+    name: guest
+    state: absent
+    remove: true
+  become: true
+  ignore_errors: true  # Puede que no exista
+  tags:
+    - seguridad
+    - guest
+
+# =========================================
+# CONFIGURACIÓN DE LIMITES DE SISTEMA
+# =========================================
+
+- name: "📊 Configurar límites de sistema para usuarios"
+  ansible.builtin.template:
+    src: limits.conf.j2
+    dest: "/etc/security/limits.d/lab_users.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - limites
+    - seguridad
+
+# =========================================
+# AUDITORÍA Y LOGGING
+# =========================================
+
+- name: "📋 Configurar logging de actividades de usuario"
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/common-session
+    line: "session required pam_exec.so /usr/local/bin/log_user_activity.sh"
+    insertafter: "session.*pam_unix.so"
+  become: true
+  tags:
+    - auditoria
+    - logging
+
+- name: "📝 Crear script de logging de actividades"
+  ansible.builtin.template:
+    src: log_user_activity.sh.j2
+    dest: "/usr/local/bin/log_user_activity.sh"
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  tags:
+    - auditoria
+    - scripts
+
+# =========================================
+# VALIDACIÓN DE CONFIGURACIÓN
+# =========================================
+
+- name: "✅ Verificar que los usuarios fueron creados correctamente"
+  ansible.builtin.command: id {{ item.username }}
+  loop: "{{ lab_usuarios }}"
+  register: user_validation
+  changed_when: false
+  failed_when: user_validation.rc != 0
+  become: true
+  tags:
+    - validacion
+
+- name: "📊 Mostrar información de usuarios creados"
+  ansible.builtin.debug:
+    msg:
+      - "✅ Usuario {{ item.item.username }} creado exitosamente"
+      - "🆔 ID: {{ item.stdout }}"
+      - "👥 Grupos: {{ item.item.groups | join(', ') }}"
+      - "🔧 Configuración sudo: {{ item.item.sudo_config | default('ninguna') }}"
+  loop: "{{ user_validation.results }}"
+  when: user_validation is defined
+  tags:
+    - validacion
+    - info

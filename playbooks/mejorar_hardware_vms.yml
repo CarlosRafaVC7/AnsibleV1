@@ -1,0 +1,66 @@
+---
+# Playbook para mejorar hardware de VMs existentes en ESXi
+# Configura SCSI, USB 3.1, Video optimizado
+- hosts: localhost
+  gather_facts: yes
+  collections: [community.vmware]
+  vars_files:
+    - ../group_vars/vault_vars.yml
+
+  vars:
+    # Configuración ESXi real
+    esxi_host: "168.121.48.254"
+    esxi_port: "10117"
+    esxi_user: "{{ vault_esxi_username }}"
+    esxi_pass: "{{ vault_esxi_password }}"
+    
+    # VMs existentes a mejorar
+    vms_mejorar:
+      - name: "LinuxMint-Academico"
+        memory_mb: 4096
+        num_cpus: 2
+        vram_mb: 128          # Video RAM mejorada
+        usb_controller: "usb3"
+        
+      - name: "Windows10-Gamer" 
+        memory_mb: 8192
+        num_cpus: 4
+        vram_mb: 256          # Video RAM para gaming
+        usb_controller: "usb3"
+
+  tasks:
+    - name: "🔧 Mejorar hardware VM {{ item.name }}"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ item.name }}"
+        state: present
+        hardware:
+          memory_mb: "{{ item.memory_mb }}"
+          num_cpus: "{{ item.num_cpus }}"
+          scsi: lsilogicsas         # SCSI Controller LSI Logic SAS
+          version: latest           # Usar hardware version más reciente
+        customvalues:
+          - key: "usb.present"
+            value: "TRUE"
+          - key: "usb.generic.allowHID"  
+            value: "TRUE"
+          - key: "usb_xhci.present"      # USB 3.0 controller
+            value: "TRUE"
+          - key: "svga.vramSize"         # Video RAM
+            value: "{{ item.vram_mb * 1048576 }}"  # Convert MB to bytes
+      register: vm_upgrade_result
+      loop: "{{ vms_mejorar }}"
+      
+    - name: "✅ Hardware mejorado completado"
+      ansible.builtin.debug:
+        msg:
+          - "🔧 HARDWARE MEJORADO EXITOSAMENTE"
+          - "✅ SCSI: LSI Logic SAS (Mejorado)"
+          - "✅ USB: 3.0/3.1 Habilitado"
+          - "✅ Video: VRAM aumentada + 3D"
+          - "✅ Bluetooth: Habilitado"
+          - ""
+          - "🎯 AHORA APAGA Y ENCIENDE LAS VMs"

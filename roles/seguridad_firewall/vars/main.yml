@@ -1,0 +1,236 @@
+---
+# =========================================
+# VARIABLES DEL ROL: seguridad_firewall
+# Configuración de firewall, antivirus y red
+# =========================================
+
+# =========================================
+# CONFIGURACIÓN DE FIREWALL
+# =========================================
+firewall_config:
+  # Puertos seguros permitidos
+  allowed_ports:
+    ssh: 22
+    http: 80
+    https: 443
+    dns: 53
+    ntp: 123
+    winrm_http: 5985
+    winrm_https: 5986
+  
+  # Puertos peligrosos a bloquear explícitamente
+  blocked_ports:
+    telnet: 23
+    ftp: 21
+    snmp: 161
+    netbios: 139
+    smb: 445
+    sql_server: 1433
+    rdp: 3389
+    mysql: 3306
+    postgresql: 5432
+  
+  # Redes autorizadas para SSH
+  authorized_networks:
+    - "192.168.1.0/24"    # Red local principal
+    - "127.0.0.1"         # Localhost
+    - "::1"               # IPv6 localhost
+  
+  # Configuración de logging
+  enable_logging: true
+  log_level: "info"
+  log_file: "/var/log/firewall.log"
+  
+  # Protección adicional
+  enable_web_protection: true
+  enable_email_alerts: false
+  enable_rate_limiting: true
+
+# =========================================
+# CONFIGURACIÓN DE ANTIVIRUS
+# =========================================
+antivirus_config:
+  # ClamAV (Linux)
+  clamav:
+    enable_realtime: true
+    enable_scheduled_scan: true
+    scan_time: "02:30"            # 2:30 AM
+    scan_directories:
+      - "/home"
+      - "/opt" 
+      - "/tmp"
+      - "/var/log"
+    exclude_directories:
+      - "/sys"
+      - "/proc"
+      - "/dev"
+    update_frequency: "hourly"
+    
+  # Windows Defender
+  windows_defender:
+    real_time_protection: true
+    cloud_protection: true
+    automatic_sample_submission: true
+    behavior_monitoring: true
+    script_scanning: true
+    scan_time: "02:00"            # 2:00 AM
+    
+    # Exclusiones para rendimiento
+    exclusions:
+      paths:
+        - "C:\\Windows\\Temp"
+        - "C:\\Users\\*\\AppData\\Local\\Temp"
+      extensions:
+        - ".tmp"
+        - ".log"
+
+# =========================================
+# CONFIGURACIÓN DE FAIL2BAN
+# =========================================
+fail2ban_config:
+  # Configuración general
+  bantime: 1800              # 30 minutos
+  findtime: 600              # 10 minutos 
+  maxretry: 3                # 3 intentos máximo
+  
+  # IPs a ignorar (nunca banear)
+  ignoreip:
+    - "127.0.0.1/8"
+    - "192.168.1.0/24"
+    - "::1"
+  
+  # Servicios a proteger
+  protected_services:
+    ssh:
+      enabled: true
+      port: "ssh"
+      maxretry: 3
+      bantime: 1800
+    
+    apache:
+      enabled: true
+      port: "http,https"
+      maxretry: 5
+      bantime: 3600
+      
+    nginx:
+      enabled: true
+      port: "http,https" 
+      maxretry: 5
+      bantime: 3600
+
+# =========================================
+# CONFIGURACIÓN DE RED DHCPv6
+# =========================================
+network_config:
+  # Configuración DHCPv6
+  dhcp6_enabled: true
+  dhcp4_fallback: true
+  ipv6_privacy: false
+  ipv6_address_generation: "eui64"
+  
+  # DNS híbrido
+  dns_servers:
+    ipv6:
+      - "2001:4860:4860::8888"     # Google DNS IPv6
+      - "2001:4860:4860::8844"     # Google DNS IPv6 secundario
+      - "2606:4700:4700::1111"     # Cloudflare DNS IPv6
+      - "2606:4700:4700::1001"     # Cloudflare DNS IPv6 secundario
+    ipv4:
+      - "8.8.8.8"                  # Google DNS IPv4
+      - "8.8.4.4"                  # Google DNS IPv4 secundario
+      - "1.1.1.1"                  # Cloudflare DNS IPv4
+      - "1.0.0.1"                  # Cloudflare DNS IPv4 secundario
+  
+  # Configuración de dominio
+  domain: "lab.local"
+  search_domains:
+    - "lab.local"
+    - "local"
+  
+  # Configuración avanzada
+  dns_over_tls: false
+  dns_validation: true
+  dns_debug: false
+  
+  # Configuración de backup estático (opcional)
+  static_backup: false
+  ipv4_backup: "192.168.1.100/24"
+  ipv6_backup: "fe80::100/64"
+  
+  # WiFi (si aplica)
+  wifi_enabled: false
+  wifi_ssid: ""
+  wifi_password: ""
+  
+  # Bridge (si aplica)
+  bridge_enabled: false
+
+# =========================================
+# CONFIGURACIÓN DE SERVICIOS DE SEGURIDAD
+# =========================================
+security_services:
+  # Servicios a habilitar
+  enable:
+    - ufw                    # UFW firewall (Linux)
+    - clamav-daemon         # ClamAV antivirus (Linux) 
+    - clamav-freshclam      # Actualizador ClamAV (Linux)
+    - fail2ban              # Protección SSH (Linux)
+    - systemd-resolved      # DNS resolver (Linux)
+  
+  # Servicios a deshabilitar (seguridad)
+  disable:
+    linux:
+      - avahi-daemon        # Descubrimiento de red
+      - cups               # Sistema de impresión
+      - bluetooth          # Conectividad Bluetooth
+    windows:
+      - Fax                # Servicio de fax
+      - TapiSrv           # Telefonía
+      - RemoteRegistry    # Registro remoto
+      - Browser           # Explorador de equipos
+
+# =========================================
+# CONFIGURACIÓN DE MONITOREO Y LOGS
+# =========================================
+monitoring_config:
+  # Directorios de logs
+  log_directories:
+    linux:
+      firewall: "/var/log/ufw.log"
+      fail2ban: "/var/log/fail2ban.log"
+      clamav: "/var/log/clamav/"
+      security: "/var/log/security/"
+    windows:
+      firewall: "%systemroot%\\system32\\logfiles\\firewall\\pfirewall.log"
+      defender: "%programdata%\\Microsoft\\Windows Defender\\Support\\"
+  
+  # Rotación de logs
+  log_rotation:
+    enabled: true
+    max_size: "100M"
+    retention_days: 30
+    compress: true
+  
+  # Alertas
+  alerts:
+    enable_email: false
+    email_address: "admin@lab.local"
+    alert_threshold: 5      # Número de eventos para alerta
+
+# =========================================
+# CONFIGURACIÓN DE PERFORMANCE
+# =========================================
+performance_config:
+  # Límites de conexión
+  max_connections: 1000
+  connection_timeout: 30
+  
+  # Buffer sizes
+  network_buffers:
+    tcp_rmem: "4096 87380 6291456"
+    tcp_wmem: "4096 16384 4194304"
+  
+  # Optimizaciones de red
+  tcp_congestion_control: "bbr"
+  tcp_fast_open: true

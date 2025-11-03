@@ -1,0 +1,50 @@
+#!/bin/bash
+# =========================================
+# SCRIPT DE LOGGING DE ACTIVIDADES DE USUARIO
+# Propósito: Registrar actividades de login/logout
+# Generado por Ansible: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+# Configuración
+LOG_FILE="{{ audit_config.activity_log_file }}"
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+HOSTNAME=$(hostname)
+
+# Información del usuario
+USER="${PAM_USER:-unknown}"
+SERVICE="${PAM_SERVICE:-unknown}"
+TTY="${PAM_TTY:-unknown}"
+RHOST="${PAM_RHOST:-local}"
+
+# Función de logging
+log_activity() {
+    local action="$1"
+    local message="$2"
+    
+    # Crear directorio si no existe
+    mkdir -p "$(dirname "$LOG_FILE")"
+    
+    # Escribir entrada de log
+    echo "[$DATE] [$HOSTNAME] [$action] User: $USER, Service: $SERVICE, TTY: $TTY, From: $RHOST - $message" >> "$LOG_FILE"
+    
+    # También enviar a syslog
+    logger -t "user_activity" -p auth.info "[$action] User: $USER, Service: $SERVICE, TTY: $TTY, From: $RHOST - $message"
+}
+
+# Determinar el tipo de evento basado en PAM_TYPE
+case "$PAM_TYPE" in
+    "open_session")
+        log_activity "LOGIN" "Session opened"
+        ;;
+    "close_session") 
+        log_activity "LOGOUT" "Session closed"
+        ;;
+    *)
+        log_activity "AUTH" "Authentication event: $PAM_TYPE"
+        ;;
+esac
+
+# Rotar logs si es necesario (mantener solo {{ audit_config.log_retention_days }} días)
+find "$(dirname "$LOG_FILE")" -name "$(basename "$LOG_FILE")*" -type f -mtime +{{ audit_config.log_retention_days }} -delete 2>/dev/null
+
+exit 0

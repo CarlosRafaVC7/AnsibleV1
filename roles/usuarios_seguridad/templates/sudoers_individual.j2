@@ -1,0 +1,36 @@
+# =========================================
+# CONFIGURACIÓN INDIVIDUAL SUDOERS
+# Usuario: {{ item.username }} - {{ item.fullname }}
+# Configuración: {{ item.sudo_config }}
+# Generado: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+{% if item.sudo_config == 'full' %}
+# Administrador con privilegios completos
+{{ item.username }}    ALL=(ALL:ALL) NOPASSWD:ALL
+
+{% elif item.sudo_config == 'limited' %}
+# Usuario con privilegios limitados para educación
+{{ item.username }}    ALL=(ALL) PASSWD: /usr/bin/systemctl status *, \
+                                        /usr/bin/systemctl start apache2, \
+                                        /usr/bin/systemctl stop apache2, \
+                                        /usr/bin/systemctl restart apache2, \
+                                        /usr/bin/systemctl start mysql, \
+                                        /usr/bin/systemctl stop mysql, \
+                                        /usr/bin/systemctl restart mysql, \
+                                        /usr/bin/tail /var/log/apache2/*, \
+                                        /usr/bin/tail /var/log/mysql/*
+
+{% elif item.sudo_config == 'web_service' %}
+# Usuario solo para servicios web
+{{ item.username }}    ALL=(ALL) NOPASSWD: /usr/bin/systemctl status apache2, \
+                                          /usr/bin/systemctl start apache2, \
+                                          /usr/bin/systemctl stop apache2, \
+                                          /usr/bin/systemctl restart apache2, \
+                                          /usr/bin/systemctl reload apache2
+
+{% else %}
+# Usuario sin privilegios sudo especiales
+# {{ item.username }} no tiene privilegios sudo configurados
+
+{% endif %}

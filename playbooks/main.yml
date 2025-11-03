@@ -1,29 +1,32 @@
 ---
 # Playbook principal: Administración total de laboratorios
-# SO-Ansible (Hybrid) - Soporte para Linux, Windows y macOS
+# SO-Ansible (ESXi Lab) - Soporte para Linux Mint y Windows 10
 
-- name: Configuración de seguridad integral
-  hosts: all
+- name: Configuración de seguridad integral ESXi Lab
+  hosts: managed
   become: yes
+  ignore_unreachable: yes
   roles:
     - security
 
-- name: Administración completa en Laboratorio Académico (Linux Ubuntu/Mint)
+- name: Administración completa en Laboratorio Académico (Linux Mint ESXi)
   hosts: academico
   become: yes
+  ignore_unreachable: yes
   roles:
-    - linux
+    - linux_users
+    - linux_storage
+    - linux_services
+    - linux_jobs
 
-- name: Administración completa en Laboratorio Gamer (Windows 11 Pro)
+- name: Administración completa en Laboratorio Gamer (Windows 10 ESXi)
   hosts: gamer
+  ignore_unreachable: yes
   roles:
-    - windows
-
-- name: Administración completa en VM macOS (Testing)
-  hosts: macos_test
-  become: yes
-  roles:
-    - macos
+    - windows_users
+    - windows_storage
+    - windows_services
+    - windows_jobs
 
 - name: Resumen de administración
   hosts: localhost
@@ -32,13 +35,13 @@
     - name: Mostrar resumen final
       ansible.builtin.debug:
         msg:
-          - "=== ADMINISTRACIÓN COMPLETADA ==="
+          - "=== LABORATORIO ESXi ADMINISTRADO COMPLETAMENTE ==="
           - ""
           - "🔒 Seguridad configurada en todos los hosts"
-          - "Hosts configurados:"
-          - "  Académico (Linux): {{ groups['academico'] | length }} host(s)"
-          - "  Gamer (Windows): {{ groups['gamer'] | length }} host(s)"
-          - "  macOS Test: {{ groups['macos_test'] | default([]) | length }} host(s)"
+          - "🖥️ Hosts configurados:"
+          - "  Académico (Linux Mint): {{ groups['academico'] | length }} host(s)"
+          - "  Gamer (Windows 10): {{ groups['gamer'] | length }} host(s)"
+          - "  ESXi Total: {{ groups['esxi'] | length }} host(s)"
           - ""
           - "🛡️  Políticas de seguridad aplicadas:"
           - "  - Firewall configurado (iptables/Windows Firewall)"

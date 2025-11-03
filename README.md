@@ -1,168 +1,176 @@
-# SO-Ansible (Hybrid) v1.1
+# Automatización de Laboratorios con Ansible
 
-Proyecto Ansible para administración híbrida de infraestructura con soporte para:
-- **ESXi/VMware** - Creación de VMs base
-- **VirtualBox** - Desarrollo local  
-- **Linux/Windows/macOS** - Configuración multiplataforma
-- **IPv6 + IPv4** - Red dual stack
+## Descripción General del Proyecto
+Este proyecto implementa la automatización de tareas administrativas para dos entornos de laboratorio diferentes:
+- **Laboratorio Académico**: Basado en Linux Mint, enfocado en actividades educativas y desarrollo.
+- **Laboratorio de Juegos**: Basado en Windows, optimizado para gaming y rendimiento.
 
-## 🏗️ Arquitectura del Proyecto
-
-### Fase 1: Infraestructura (Automatizada)
-- Creación de VMs base en ESXi o VirtualBox
-- Configuración de hardware y red básica
-
-### Fase 2: Instalación OS (Manual)
-- Instalación de sistemas operativos
-- Configuración inicial de usuarios y conectividad
-
-### Fase 3: Configuración (Automatizada)
-- Gestión de servicios y aplicaciones
-- Configuración avanzada de red IPv6
-- Administración de usuarios y seguridad
-
-## 📁 Estructura del Proyecto
-
+## Arquitectura del Sistema
+### 1. Estructura del Proyecto
 ```
-AnsibleV1/
-├── playbooks/
-│   ├── main.yml                    # Playbook principal
-│   └── infrastructure/
-│       └── esxi_create.yml         # Creación de VMs en ESXi
-├── roles/
-│   ├── infrastructure/             # Creación de VMs
-│   ├── linux/                     # Configuración Linux/Ubuntu
-│   ├── windows/                   # Configuración Windows
-│   └── macos/                     # Configuración macOS
+ansible-project/
 ├── inventory/
-│   └── hosts.ini                  # Inventario de hosts
-├── group_vars/                    # Variables por grupos
-├── templates/                     # Plantillas de configuración
-└── docs/
-    └── INSTALACION_MANUAL.md      # Guía de instalación manual
+│   └── hosts.ini          # Inventario de máquinas
+├── playbooks/
+│   └── main.yml          # Playbook principal
+└── roles/
+    ├── linux/            # Roles para Linux Mint
+    │   ├── users        # Gestión de usuarios
+    │   ├── services     # Procesos y servicios
+    │   ├── jobs         # Tareas automatizadas
+    │   └── storage      # Gestión de almacenamiento
+    └── windows/          # Roles para Windows
+        ├── users        # Gestión de usuarios Windows
+        ├── services     # Servicios Windows
+        ├── jobs         # Tareas programadas
+        └── storage      # Gestión de discos
 ```
 
-## 🚀 Ejecución del Proyecto
+### 2. Componentes Principales
+- **Inventario**: Define los hosts y sus grupos (académico y gamer)
+- **Playbook Principal**: Orquesta la ejecución de roles
+- **Roles**: Tareas específicas para cada sistema operativo
 
-### Fase 1: Creación de VMs Base (Automatizada)
-```bash
-# Crear VMs base en ESXi
-ansible-playbook playbooks/infrastructure/esxi_create.yml
-```
+## Requisitos del Sistema
+### Para el Control Node (donde se ejecuta Ansible)
+- Ansible 2.16.3 o superior
+- Python 3.x
+- SSH cliente
+- WSL o Linux
+- Módulo pywinrm para Windows
 
-### Fase 2: Instalación Manual de OS (Manual)
-📋 **Seguir la guía:** [docs/INSTALACION_MANUAL.md](docs/INSTALACION_MANUAL.md)
+### Para Nodos Linux (Mint)
+- SSH Server habilitado
+- Python 3.x
+- Usuario con privilegios sudo
 
-Esta fase incluye:
-- Instalación de Ubuntu Server 24.04 LTS  
-- Instalación de Windows 11 Pro
-- Configuración de red y SSH/WinRM
-- Actualización de inventario con IPs reales
+### Para Nodos Windows
+- WinRM habilitado
+- PowerShell 3.0 o superior
+- Puerto 5985 accesible (WinRM-HTTP)
 
-### Fase 3: Configuración Automatizada (Ansible)
-```bash
-# Una vez completada la instalación manual
-ansible-playbook playbooks/main.yml
+## Funcionalidades Implementadas
 
-# Configuración específica por tags
-ansible-playbook playbooks/main.yml --tags "network,users"
+### 1. Gestión de Procesos y Servicios
+- Monitoreo de recursos
+- Control de servicios
+- Análisis de rendimiento
 
-# Solo sistemas Linux
-ansible-playbook playbooks/main.yml --limit linux
+### 2. Administración de Usuarios
+- Creación de cuentas
+- Gestión de permisos
+- Políticas de seguridad
 
-# Solo sistemas Windows  
-ansible-playbook playbooks/main.yml --limit windows
-```
+### 3. Automatización de Tareas
+- Respaldos programados
+- Monitoreo automático
+- Logs de rendimiento
 
-## ⚙️ Configuración Inicial
+### 4. Gestión de Almacenamiento
+- Control de espacio en disco
+- Organización de archivos
+- Puntos de montaje
 
-### 1. Preparar entorno
-```bash
-# Activar entorno virtual
-source .venv/bin/activate
+## Flujo de Trabajo
+1. **Preparación**
+   - Verificar conectividad de red
+   - Configurar SSH/WinRM
+   - Validar credenciales
 
-# Instalar dependencias
-pip install -r requirements.txt
+2. **Ejecución**
+   ```bash
+   # Verificar sintaxis
+   ansible-playbook -i inventory/hosts.ini playbooks/main.yml --syntax-check
 
-# Instalar collections
-ansible-galaxy collection install -r requirements.yml
-```
+   # Simulación (dry-run)
+   ansible-playbook -i inventory/hosts.ini playbooks/main.yml --check
 
-### 2. Configurar inventario
-Editar `inventory/hosts.ini` con las IPs reales después de la instalación manual:
+   # Ejecución real
+   ansible-playbook -i inventory/hosts.ini playbooks/main.yml
+   ```
 
-```ini
-[academico]
-192.168.1.100 ansible_user=ansible
+3. **Verificación**
+   - Comprobar usuarios creados
+   - Verificar servicios activos
+   - Validar tareas programadas
+   - Revisar espacio en disco
 
-[gamer]  
-192.168.1.101 ansible_user=Administrador ansible_connection=winrm
-```
+## Resultados Esperados
 
-### 3. Probar conectividad
-```bash
-# Linux
-ansible academico -m ping
+### En Laboratorio Académico (Linux)
+1. **Usuarios y Permisos**
+   - Usuario lab_student creado
+   - Permisos sudo configurados
+   - Carpetas compartidas establecidas
 
-# Windows
-ansible gamer -m win_ping
-```
+2. **Procesos y Servicios**
+   - Servicios críticos activos
+   - Monitoreo de recursos configurado
+   - Logs de rendimiento activos
 
-## 🌐 Características de Red
+3. **Tareas Automatizadas**
+   - Respaldos programados
+   - Monitoreo periódico
+   - Logs de sistema configurados
 
-- **IPv6 preferido** con fallback IPv4
-- **DNS dual stack** (Google DNS IPv6/IPv4)
-- **Configuración automática** de netplan (Linux) y PowerShell (Windows)
-- **Plantillas personalizables** para diferentes topologías
+4. **Almacenamiento**
+   - Puntos de montaje creados
+   - Espacio monitoreado
+   - Estructura de directorios organizada
 
-## 📋 Laboratorios Incluidos
+### En Laboratorio de Juegos (Windows)
+1. **Usuarios y Permisos**
+   - Usuario LabStudent creado
+   - Permisos de administrador asignados
+   - ACLs configuradas
 
-### Laboratorio Académico (Linux)
-- **OS**: Ubuntu Server 24.04 LTS
-- **Servicios**: SSH, Docker, nginx
-- **Red**: IPv6 estática + IPv4 DHCP
-- **Usuario**: ansible (sudo sin contraseña)
+2. **Procesos y Servicios**
+   - Servicios Windows optimizados
+   - Monitoreo de rendimiento activo
+   - WinRM configurado
 
-### Laboratorio Gamer (Windows)  
-- **OS**: Windows 11 Pro
-- **Servicios**: WinRM, IIS, Hyper-V
-- **Red**: IPv6 estática + IPv4 DHCP
-- **Usuario**: Administrador
+3. **Tareas Programadas**
+   - Respaldos automáticos
+   - Monitoreo de recursos
+   - Logs de rendimiento
 
-### Laboratorio Testing (macOS)
-- **OS**: macOS Mojave (opcional)
-- **Servicios**: SSH, homebrew
-- **Red**: IPv6 + IPv4
-- **Usuario**: admin
+4. **Almacenamiento**
+   - Discos organizados
+   - Carpetas de juegos estructuradas
+   - Espacio monitoreado
 
-## 🔧 Herramientas de Validación
+## Beneficios del Sistema
+1. **Automatización Completa**
+   - Reducción de errores humanos
+   - Configuración consistente
+   - Despliegue rápido
 
-```bash
-# Validar sintaxis
-./validate_project.sh
+2. **Mantenimiento Simplificado**
+   - Monitoreo automatizado
+   - Respaldos programados
+   - Gestión centralizada
 
-# Verificar estructura
-ansible-playbook --syntax-check playbooks/main.yml
+3. **Escalabilidad**
+   - Fácil añadir nuevos hosts
+   - Roles reutilizables
+   - Configuración modular
 
-# Modo dry-run
-ansible-playbook playbooks/main.yml --check
-```
+4. **Seguridad**
+   - Gestión consistente de usuarios
+   - Permisos estandarizados
+   - Logs centralizados
 
-## 📚 Documentación
+## Mantenimiento y Monitoreo
+- Revisión periódica de logs
+- Verificación de respaldos
+- Monitoreo de recursos
+- Actualización de configuraciones
 
-- [Instalación Manual de OS](docs/INSTALACION_MANUAL.md)
-- [Configuración de Red IPv6](templates/README.md)
-- [Roles y Variables](group_vars/README.md)
+## Conclusión
+Este sistema proporciona una solución completa y automatizada para la gestión de ambos laboratorios, garantizando:
+- Estabilidad operativa
+- Rendimiento optimizado
+- Mantenimiento simplificado
+- Gestión eficiente de recursos
 
-## 💡 Mejores Prácticas
-
-Como recomienda el **Ing. Paulo**:
-1. **Ansible NO debe** automatizar instalación de OS
-2. **Usar templates** para VMs configuradas
-3. **Automatizar configuración** post-instalación
-4. **Documentar pasos manuales** claramente
-
----
-
-**Proyecto desarrollado para el curso de Sistemas Operativos**  
-**Universidad Peruana Unión - Facultad de Ingeniería**
+La automatización con Ansible asegura consistencia en las configuraciones y reduce significativamente el tiempo de administración manual, permitiendo que los administradores se enfoquen en tareas más estratégicas.

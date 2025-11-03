@@ -1,0 +1,250 @@
+---
+# Playbook para gestión segura de VMs en ESXi
+# Incluye logging de seguridad y trazabilidad completa
+
+- hosts: localhost
+  gather_facts: no
+  collections: [community.vmware]
+
+  vars:
+    # Configuración ESXi con credenciales del vault
+    esxi_host: "168.121.48.254:10113"
+    esxi_user: "{{ vault_esxi_username | default('root') }}"
+    esxi_pass: "{{ vault_esxi_password }}"
+    ds_name: "datastore1"
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    
+    # Configuración de VMs del proyecto
+    linux_vm_name: "linux-mint-academico"
+    windows_vm_name: "windows-gaming-lab"
+    
+    # ISOs disponibles
+    linux_iso_path: "[datastore1] linuxmint-21.3-cinnamon-64bit.iso"
+    windows_iso_path: "[datastore1] windows-11-pro.iso"
+    
+    # Red y seguridad
+    portgroup: "VM Network"
+    security_log_path: "/var/log/ansible_monitor/esxi_operations.log"
+
+  tasks:
+    # ==========================================
+    # LOGGING DE SEGURIDAD - Al inicio
+    # ==========================================
+    - name: "🔒 Registrar inicio de operaciones ESXi"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - INICIO: Operaciones ESXi por usuario {{ ansible_user_id }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: "📋 Mostrar configuración de seguridad inicial"
+      ansible.builtin.debug:
+        msg:
+          - "============================================="
+          - "🔒 OPERACIONES SEGURAS EN ESXI"
+          - "============================================="
+          - "ESXi Host: {{ esxi_host }}"
+          - "Usuario: {{ esxi_user }}"
+          - "Datastore: {{ ds_name }}"
+          - "Portgroup: {{ portgroup }}"
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "============================================="
+
+    # ==========================================
+    # CREACIÓN VM LINUX ACADÉMICO
+    # ==========================================
+    - name: "🐧 Crear VM Linux Mint (Laboratorio Académico)"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/Laboratorios"
+        name: "{{ linux_vm_name }}"
+        state: present
+        guest_id: "ubuntu64Guest"
+        datastore: "{{ ds_name }}"
+        hardware:
+          memory_mb: 4096
+          num_cpus: 2
+          scsi: paravirtual
+        disk:
+          - size_gb: 40
+            type: thin
+            datastore: "{{ ds_name }}"
+        networks:
+          - name: "{{ portgroup }}"
+            start_connected: true
+            device_type: vmxnet3
+        wait_for_ip_address: no
+        state_change_timeout: 180
+      register: linux_vm_result
+
+    - name: "🔒 Registrar creación VM Linux"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - CREACIÓN: VM Linux {{ linux_vm_name }} - Estado: {{ linux_vm_result.changed | ternary('CREADA', 'YA_EXISTÍA') }}"
+      delegate_to: localhost
+
+    # ==========================================
+    # CREACIÓN VM WINDOWS GAMING
+    # ==========================================
+    - name: "🎮 Crear VM Windows (Laboratorio Gaming)"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/Laboratorios"
+        name: "{{ windows_vm_name }}"
+        state: present
+        guest_id: "windows9_64Guest"
+        datastore: "{{ ds_name }}"
+        hardware:
+          memory_mb: 8192
+          num_cpus: 4
+          scsi: paravirtual
+        disk:
+          - size_gb: 80
+            type: thin
+            datastore: "{{ ds_name }}"
+        networks:
+          - name: "{{ portgroup }}"
+            start_connected: true
+            device_type: vmxnet3
+        wait_for_ip_address: no
+        state_change_timeout: 180
+      register: windows_vm_result
+
+    - name: "🔒 Registrar creación VM Windows"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - CREACIÓN: VM Windows {{ windows_vm_name }} - Estado: {{ windows_vm_result.changed | ternary('CREADA', 'YA_EXISTÍA') }}"
+      delegate_to: localhost
+
+    # ==========================================
+    # CONFIGURACIÓN DE SEGURIDAD EN VMs
+    # ==========================================
+    - name: "🔒 Obtener información detallada de VM Linux"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ linux_vm_name }}"
+      register: linux_vm_info
+
+    - name: "🔒 Obtener información detallada de VM Windows"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ windows_vm_name }}"
+      register: windows_vm_info
+
+    # ==========================================
+    # LOGGING DE SEGURIDAD - Información detallada
+    # ==========================================
+    - name: "📊 Mostrar configuración de seguridad VM Linux"
+      ansible.builtin.debug:
+        msg:
+          - "=============== VM LINUX ACADÉMICO ==============="
+          - "Nombre: {{ linux_vm_name }}"
+          - "Estado: {{ linux_vm_info.instance.hw_power_status }}"
+          - "IP: {{ linux_vm_info.instance.ipv4 | default('Pendiente') }}"
+          - "MAC: {{ linux_vm_info.instance.hw_eth0.macaddress | default('N/A') }}"
+          - "CPU: {{ linux_vm_info.instance.hw_processor_count }}"
+          - "RAM: {{ linux_vm_info.instance.hw_memtotal_mb }} MB"
+          - "Discos: {{ linux_vm_info.instance.hw_files | length }} archivo(s)"
+          - "NICs: {{ linux_vm_info.instance.networks | default([]) | length }}"
+          - "=============================================="
+
+    - name: "📊 Mostrar configuración de seguridad VM Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=============== VM WINDOWS GAMING ==============="
+          - "Nombre: {{ windows_vm_name }}"
+          - "Estado: {{ windows_vm_info.instance.hw_power_status }}"
+          - "IP: {{ windows_vm_info.instance.ipv4 | default('Pendiente') }}"
+          - "MAC: {{ windows_vm_info.instance.hw_eth0.macaddress | default('N/A') }}"
+          - "CPU: {{ windows_vm_info.instance.hw_processor_count }}"
+          - "RAM: {{ windows_vm_info.instance.hw_memtotal_mb }} MB"
+          - "Discos: {{ windows_vm_info.instance.hw_files | length }} archivo(s)"
+          - "NICs: {{ windows_vm_info.instance.networks | default([]) | length }}"
+          - "=============================================="
+
+    # ==========================================
+    # LOGGING COMPLETO DE DISPOSITIVOS (MEDIDA DE SEGURIDAD)
+    # ==========================================
+    - name: "🔍 Auditoría completa de dispositivos VM Linux"
+      ansible.builtin.debug:
+        msg:
+          - "=== AUDITORÍA DE DISPOSITIVOS LINUX ==="
+          - "CD/DVD devices: {{ (linux_vm_info.instance.guest_devices | selectattr('type','equalto','cdrom') | list) | default([]) }}"
+          - "Network devices: {{ linux_vm_info.instance.networks | default([]) }}"
+          - "Disk devices: {{ linux_vm_info.instance.hw_files | default([]) }}"
+          - "USB devices: {{ (linux_vm_info.instance.guest_devices | selectattr('type','equalto','usb') | list) | default([]) }}"
+
+    - name: "🔍 Auditoría completa de dispositivos VM Windows"
+      ansible.builtin.debug:
+        msg:
+          - "=== AUDITORÍA DE DISPOSITIVOS WINDOWS ==="
+          - "CD/DVD devices: {{ (windows_vm_info.instance.guest_devices | selectattr('type','equalto','cdrom') | list) | default([]) }}"
+          - "Network devices: {{ windows_vm_info.instance.networks | default([]) }}"
+          - "Disk devices: {{ windows_vm_info.instance.hw_files | default([]) }}"
+          - "USB devices: {{ (windows_vm_info.instance.guest_devices | selectattr('type','equalto','usb') | list) | default([]) }}"
+
+    # ==========================================
+    # LOGGING DE SEGURIDAD - Registro completo
+    # ==========================================
+    - name: "🔒 Registrar configuración completa de VMs"
+      ansible.builtin.blockinfile:
+        path: "{{ security_log_path }}"
+        marker: "# {mark} ANSIBLE VM AUDIT {{ ansible_date_time.iso8601 }}"
+        block: |
+          =================== AUDITORÍA DE SEGURIDAD VMs ===================
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          Operador: {{ ansible_user_id }}
+          ESXi Host: {{ esxi_host }}
+          
+          === VM LINUX ACADÉMICO ===
+          Nombre: {{ linux_vm_name }}
+          Estado: {{ linux_vm_info.instance.hw_power_status }}
+          IP: {{ linux_vm_info.instance.ipv4 | default('Pendiente') }}
+          MAC: {{ linux_vm_info.instance.hw_eth0.macaddress | default('N/A') }}
+          Recursos: {{ linux_vm_info.instance.hw_processor_count }}CPU / {{ linux_vm_info.instance.hw_memtotal_mb }}MB RAM
+          
+          === VM WINDOWS GAMING ===
+          Nombre: {{ windows_vm_name }}
+          Estado: {{ windows_vm_info.instance.hw_power_status }}
+          IP: {{ windows_vm_info.instance.ipv4 | default('Pendiente') }}
+          MAC: {{ windows_vm_info.instance.hw_eth0.macaddress | default('N/A') }}
+          Recursos: {{ windows_vm_info.instance.hw_processor_count }}CPU / {{ windows_vm_info.instance.hw_memtotal_mb }}MB RAM
+          ================================================================
+      delegate_to: localhost
+
+    # ==========================================
+    # VERIFICACIÓN FINAL DE SEGURIDAD
+    # ==========================================
+    - name: "✅ Resumen final de operaciones de seguridad"
+      ansible.builtin.debug:
+        msg:
+          - "🔒 ===== RESUMEN DE SEGURIDAD ====="
+          - "✅ Credenciales: Protegidas con Ansible Vault"
+          - "✅ Logging: Todas las operaciones registradas"
+          - "✅ Auditoría: Dispositivos inventariados"
+          - "✅ Trazabilidad: Timestamps completos"
+          - "✅ Red: Configuración NIC documentada"
+          - "✅ Estado: VMs operativas y monitoreadas"
+          - "📁 Log file: {{ security_log_path }}"
+          - "🕒 Completado: {{ ansible_date_time.iso8601 }}"
+          - "================================="
+
+    - name: "🔒 Registrar finalización exitosa"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - COMPLETADO: Todas las operaciones ESXi finalizadas exitosamente - Usuario: {{ ansible_user_id }}"
+      delegate_to: localhost

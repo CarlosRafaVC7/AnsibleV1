@@ -1,0 +1,47 @@
+---
+# =========================================
+# HANDLERS DEL ROL: usuarios_seguridad
+# Servicios que necesitan reinicio tras cambios de configuración
+# =========================================
+
+# Reiniciar servicio SSH tras cambios de configuración
+- name: restart_ssh
+  ansible.builtin.systemd:
+    name: ssh
+    state: restarted
+    daemon_reload: true
+  become: true
+  listen: "restart ssh"
+
+# Reiniciar servicios PAM tras cambios en políticas de contraseñas
+- name: restart_pam_services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - "systemd-logind"
+    - "accounts-daemon"
+  become: true
+  ignore_errors: true
+
+# Recargar configuración de sudo tras cambios en sudoers
+- name: validate_sudoers
+  ansible.builtin.command: visudo -c
+  become: true
+  changed_when: false
+
+# Handler para aplicar cambios de grupo sin reinicio
+- name: reload_group_membership
+  ansible.builtin.command: newgrp {{ item }}
+  become: true
+  ignore_errors: true
+  loop: "{{ lab_grupos | map(attribute='name') | list }}"
+
+# Actualizar base de datos de usuarios del sistema
+- name: update_user_database
+  ansible.builtin.command: "{{ item }}"
+  loop:
+    - "pwconv"      # Sincronizar /etc/passwd con /etc/shadow
+    - "grpconv"     # Sincronizar /etc/group con /etc/gshadow
+  become: true
+  ignore_errors: true

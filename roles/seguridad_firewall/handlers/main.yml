@@ -1,0 +1,93 @@
+---
+# =========================================
+# HANDLERS DEL ROL: seguridad_firewall
+# Servicios que requieren reinicio tras cambios
+# =========================================
+
+# Reiniciar servicio UFW tras cambios de configuración
+- name: restart_ufw
+  ansible.builtin.systemd:
+    name: ufw
+    state: restarted
+    daemon_reload: true
+  become: true
+  listen: "restart ufw"
+
+# Reiniciar servicios de ClamAV
+- name: restart_clamav
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop:
+    - clamav-daemon
+    - clamav-freshclam
+  become: true
+  listen: "restart clamav"
+
+# Reiniciar Fail2ban tras cambios de configuración
+- name: restart_fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: restarted
+    daemon_reload: true
+  become: true
+  listen: "restart fail2ban"
+
+# Aplicar configuración de Netplan
+- name: apply_netplan
+  ansible.builtin.command: netplan apply
+  become: true
+  listen: "apply netplan"
+
+# Reiniciar systemd-resolved tras cambios DNS
+- name: restart_systemd_resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+    daemon_reload: true
+  become: true
+  listen: "restart systemd resolved"
+
+# Reiniciar NetworkManager tras cambios de red
+- name: restart_networkmanager
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: restarted
+  become: true
+  listen: "restart networkmanager"
+
+# Recargar reglas de iptables
+- name: reload_iptables
+  ansible.builtin.shell: |
+    iptables-restore < /etc/iptables/rules.v4
+    ip6tables-restore < /etc/iptables/rules.v6
+  become: true
+  listen: "reload iptables"
+
+# Reiniciar Windows Firewall (Windows)
+- name: restart_windows_firewall
+  ansible.windows.win_shell: |
+    netsh advfirewall reset
+    netsh advfirewall set allprofiles state on
+  listen: "restart windows firewall"
+
+# Reiniciar Windows Defender (Windows)
+- name: restart_windows_defender
+  ansible.windows.win_shell: |
+    Set-MpPreference -DisableRealtimeMonitoring $false
+    Update-MpSignature
+  listen: "restart windows defender"
+
+# Verificar estado de servicios críticos
+- name: verify_security_services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+  loop:
+    - ufw
+    - fail2ban
+    - clamav-daemon
+  become: true
+  ignore_errors: true
+  listen: "verify services"

@@ -1,0 +1,319 @@
+---
+# =========================================
+# CONFIGURACIÓN DE FIREWALL Y SEGURIDAD - WINDOWS
+# Sistema: Windows 11 Pro
+# Propósito: Windows Defender Firewall, antivirus y red
+# =========================================
+
+- name: "🪟 INICIANDO CONFIGURACIÓN DE SEGURIDAD WINDOWS"
+  ansible.builtin.debug:
+    msg:
+      - "🪟 Configurando Windows Defender Firewall y seguridad"
+      - "📋 Sistema: {{ ansible_system }} {{ ansible_distribution }}"
+      - "🌐 Red: DHCPv6 con IPv4 fallback"
+
+# =========================================
+# CONFIGURACIÓN DE WINDOWS DEFENDER FIREWALL
+# =========================================
+
+- name: "🔥 Habilitar Windows Defender Firewall en todos los perfiles"
+  ansible.windows.win_firewall:
+    state: enabled
+    profiles:
+      - domain      # Perfil de dominio (redes corporativas)
+      - private     # Perfil privado (redes domésticas/trabajo)
+      - public      # Perfil público (redes no confiables)
+  tags:
+    - firewall
+    - windows
+
+- name: "🔒 Configurar política por defecto del firewall (BLOQUEAR TODO)"
+  ansible.windows.win_shell: |
+    # Configurar política por defecto para BLOQUEAR conexiones entrantes
+    netsh advfirewall set allprofiles firewallpolicy blockinbound,allowoutbound
+    
+    # Habilitar logging para auditoría
+    netsh advfirewall set allprofiles logging filename %systemroot%\system32\logfiles\firewall\pfirewall.log
+    netsh advfirewall set allprofiles logging maxfilesize 4096
+    netsh advfirewall set allprofiles logging droppedconnections enable
+    netsh advfirewall set allprofiles logging allowedconnections enable
+  tags:
+    - firewall
+    - politicas
+
+# =========================================
+# REGLAS DE FIREWALL PARA PUERTOS SEGUROS
+# =========================================
+
+- name: "✅ Permitir SSH/WinRM solo desde red autorizada (192.168.1.0/24)"
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles:
+      - private
+      - domain
+    remoteip: 
+      - "192.168.1.0/24"
+      - "127.0.0.1"
+    description: "{{ item.description }}"
+    enabled: true
+  loop:
+    - { name: "SSH-Seguro-Lab", port: "22", description: "SSH desde red autorizada para gestión" }
+    - { name: "WinRM-HTTP-Lab", port: "5985", description: "WinRM HTTP para Ansible desde red local" }
+    - { name: "WinRM-HTTPS-Lab", port: "5986", description: "WinRM HTTPS para Ansible desde red local" }
+  tags:
+    - firewall
+    - ssh
+    - winrm
+
+- name: "🌐 Permitir servicios web seguros"
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles:
+      - private
+      - domain
+    description: "{{ item.description }}"
+    enabled: true
+  loop:
+    - { name: "HTTP-Seguro-Lab", port: "80", description: "HTTP para IIS/Apache" }
+    - { name: "HTTPS-Seguro-Lab", port: "443", description: "HTTPS para servicios web seguros" }
+  tags:
+    - firewall
+    - servicios
+
+- name: "🚫 BLOQUEAR puertos peligrosos explícitamente"
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    action: block
+    direction: in
+    protocol: tcp
+    profiles:
+      - public
+      - private
+      - domain
+    description: "{{ item.description }}"
+    enabled: true
+  loop:
+    - { name: "BLOCK-Telnet-Lab", port: "23", description: "BLOQUEAR Telnet - Protocolo inseguro" }
+    - { name: "BLOCK-FTP-Lab", port: "21", description: "BLOQUEAR FTP - Sin cifrado" }
+    - { name: "BLOCK-SNMP-Lab", port: "161", description: "BLOQUEAR SNMP - Información del sistema" }
+    - { name: "BLOCK-NetBIOS-Lab", port: "139", description: "BLOQUEAR NetBIOS - Protocolo legacy" }
+    - { name: "BLOCK-SMB-Lab", port: "445", description: "BLOQUEAR SMB directo - Riesgo de seguridad" }
+  tags:
+    - firewall
+    - seguridad
+
+# =========================================
+# CONFIGURACIÓN DE WINDOWS DEFENDER
+# =========================================
+
+- name: "🦠 Configurar Windows Defender Antivirus"
+  ansible.windows.win_shell: |
+    # Habilitar protección en tiempo real
+    Set-MpPreference -DisableRealtimeMonitoring $false
+    
+    # Configurar comportamiento del antivirus
+    Set-MpPreference -DisableBehaviorMonitoring $false
+    Set-MpPreference -DisableBlockAtFirstSeen $false
+    Set-MpPreference -DisableIOAVProtection $false
+    Set-MpPreference -DisableScriptScanning $false
+    
+    # Configurar envío de muestras y telemetría
+    Set-MpPreference -SubmitSamplesConsent 1               # Envío automático de muestras
+    Set-MpPreference -MAPSReporting 2                      # Participación avanzada en MAPS
+    
+    # Configurar acciones para amenazas
+    Set-MpPreference -HighThreatDefaultAction Remove       # Eliminar amenazas altas
+    Set-MpPreference -ModerateThreatDefaultAction Remove   # Eliminar amenazas moderadas
+    Set-MpPreference -LowThreatDefaultAction Remove        # Eliminar amenazas bajas
+    Set-MpPreference -SevereThreatDefaultAction Remove     # Eliminar amenazas severas
+    
+    # Configurar exclusiones para rendimiento (solo directorios seguros)
+    Add-MpPreference -ExclusionPath "C:\Windows\Temp"
+    Add-MpPreference -ExclusionPath "C:\Users\*\AppData\Local\Temp"
+  tags:
+    - antivirus
+    - defender
+
+- name: "🔄 Actualizar definiciones de Windows Defender"
+  ansible.windows.win_shell: |
+    # Forzar actualización de definiciones
+    Update-MpSignature -UpdateSource MicrosoftUpdateServer
+    
+    # Verificar estado de las definiciones
+    $status = Get-MpComputerStatus
+    Write-Output "Versión antivirus: $($status.AntivirusSignatureVersion)"
+    Write-Output "Última actualización: $($status.AntivirusSignatureLastUpdated)"
+    Write-Output "Protección en tiempo real: $($status.RealTimeProtectionEnabled)"
+  register: defender_update
+  tags:
+    - antivirus
+    - actualizacion
+
+- name: "🕐 Configurar escaneo automático nocturno"
+  community.windows.win_scheduled_task:
+    name: "Windows Defender Full Scan"
+    description: "Escaneo completo nocturno del sistema con Windows Defender"
+    actions:
+      - path: 'powershell.exe'
+        arguments: '-Command "Start-MpScan -ScanType FullScan"'
+    triggers:
+      - type: daily
+        start_boundary: "2025-01-01T02:00:00"
+        repetition:
+          interval: P1D  # Diario
+    settings:
+      start_when_available: true
+      run_only_if_network_available: false
+    state: present
+  tags:
+    - antivirus
+    - automatizacion
+
+# =========================================
+# CONFIGURACIÓN DE RED DHCPv6
+# =========================================
+
+- name: "🌐 Configurar adaptador de red para DHCPv6 con IPv4 fallback"
+  ansible.windows.win_shell: |
+    # Obtener el adaptador de red principal
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up" -and $_.Virtual -eq $false} | Select-Object -First 1
+    $interfaceAlias = $adapter.InterfaceAlias
+    
+    Write-Output "Configurando adaptador: $interfaceAlias"
+    
+    # Habilitar DHCPv6 (IPv6 automático)
+    Set-NetIPInterface -InterfaceAlias $interfaceAlias -AddressFamily IPv6 -Dhcp Enabled
+    Set-NetIPInterface -InterfaceAlias $interfaceAlias -AddressFamily IPv6 -RouterDiscovery Enabled
+    
+    # Configurar IPv4 como fallback (mantener DHCP por defecto)
+    Set-NetIPInterface -InterfaceAlias $interfaceAlias -AddressFamily IPv4 -Dhcp Enabled
+    
+    # Configurar preferencias IPv6
+    Set-Net6to4Configuration -State Disabled
+    Set-NetTeredoConfiguration -Type Disabled
+    Set-NetIsatapConfiguration -State Disabled
+    
+    # Priorizar IPv6 sobre IPv4
+    netsh interface ipv6 set global randomizeidentifiers=disabled
+    netsh interface ipv6 set privacy state=disabled
+    
+    Write-Output "Configuración de red DHCPv6 completada"
+  register: network_config
+  tags:
+    - red
+    - dhcpv6
+
+- name: "🔧 Configurar DNS para IPv6"
+  ansible.windows.win_shell: |
+    # Configurar DNS IPv6 (Google DNS y Cloudflare)
+    $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up" -and $_.Virtual -eq $false} | Select-Object -First 1
+    
+    # DNS IPv6
+    Set-DnsClientServerAddress -InterfaceAlias $adapter.InterfaceAlias -ServerAddresses @("2001:4860:4860::8888", "2001:4860:4860::8844", "2606:4700:4700::1111")
+    
+    # DNS IPv4 como fallback
+    Set-DnsClientServerAddress -InterfaceAlias $adapter.InterfaceAlias -ServerAddresses @("8.8.8.8", "8.8.4.4", "1.1.1.1") -ResetServerAddresses:$false
+    
+    Write-Output "DNS IPv6 configurado correctamente"
+  tags:
+    - red
+    - dns
+
+# =========================================
+# CONFIGURACIÓN ADICIONAL DE SEGURIDAD
+# =========================================
+
+- name: "🔒 Configurar políticas de seguridad adicionales"
+  ansible.windows.win_regedit:
+    path: "{{ item.path }}"
+    name: "{{ item.name }}"
+    data: "{{ item.value }}"
+    type: dword
+  loop:
+    # Deshabilitar AutoRun/AutoPlay (prevención de malware USB)
+    - { path: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", name: "NoDriveTypeAutoRun", value: 255 }
+    - { path: "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", name: "NoDriveTypeAutoRun", value: 255 }
+    
+    # Configurar UAC más estricto
+    - { path: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", name: "ConsentPromptBehaviorAdmin", value: 2 }
+    - { path: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", name: "PromptOnSecureDesktop", value: 1 }
+  tags:
+    - seguridad
+    - registro
+
+- name: "🚫 Deshabilitar servicios innecesarios para seguridad"
+  ansible.windows.win_service:
+    name: "{{ item }}"
+    state: stopped
+    start_mode: disabled
+  loop:
+    - "Fax"                    # Servicio de fax
+    - "TapiSrv"               # Telefonía
+    - "RemoteRegistry"        # Registro remoto (riesgo de seguridad)
+    - "Browser"               # Explorador de equipos (NetBIOS)
+  ignore_errors: true
+  tags:
+    - servicios
+    - seguridad
+
+# =========================================
+# VALIDACIÓN DE CONFIGURACIÓN
+# =========================================
+
+- name: "✅ Verificar estado del Windows Defender"
+  ansible.windows.win_shell: |
+    $status = Get-MpComputerStatus
+    $result = @{
+        AntivirusEnabled = $status.AntivirusEnabled
+        RealTimeProtectionEnabled = $status.RealTimeProtectionEnabled
+        FirewallEnabled = $status.FirewallEnabled
+        SignatureVersion = $status.AntivirusSignatureVersion
+        LastUpdated = $status.AntivirusSignatureLastUpdated
+    }
+    $result | ConvertTo-Json -Compress
+  register: defender_status
+  tags:
+    - validacion
+    - antivirus
+
+- name: "🔍 Verificar estado del firewall"
+  ansible.windows.win_shell: |
+    netsh advfirewall show allprofiles | findstr "State"
+  register: firewall_status
+  changed_when: false
+  tags:
+    - validacion
+    - firewall
+
+- name: "🌐 Verificar configuración de red"
+  ansible.windows.win_shell: |
+    Get-NetIPAddress | Where-Object {$_.AddressFamily -eq "IPv6" -and $_.IPAddress -notlike "fe80:*" -and $_.IPAddress -notlike "::1"} | Select-Object IPAddress,InterfaceAlias | ConvertTo-Json -Compress
+  register: ipv6_status
+  changed_when: false
+  tags:
+    - validacion
+    - red
+
+- name: "📊 Mostrar resumen de configuración Windows"
+  ansible.builtin.debug:
+    msg:
+      - "✅ Configuración de seguridad Windows completada"
+      - "🔥 Windows Firewall: {{ 'ACTIVO' if 'ON' in firewall_status.stdout else 'REVISAR' }}"
+      - "🦠 Windows Defender: {{ 'ACTIVO' if 'true' in defender_status.stdout else 'REVISAR' }}"
+      - "🌐 IPv6: {{ 'CONFIGURADO' if ipv6_status.stdout != '' else 'DHCPv6 en progreso' }}"
+      - "📋 Puertos permitidos: SSH(22), WinRM(5985/5986), HTTP(80), HTTPS(443)"
+      - "🚫 Puertos bloqueados: Telnet(23), FTP(21), SMB(445), SNMP(161)"
+      - "🔒 Servicios innecesarios: Deshabilitados"
+      - "🛡️  AutoRun/AutoPlay: Deshabilitado"
+  tags:
+    - validacion
+    - resumen

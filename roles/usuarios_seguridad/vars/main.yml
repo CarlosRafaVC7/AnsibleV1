@@ -1,0 +1,163 @@
+---
+# =========================================
+# VARIABLES DEL ROL: usuarios_seguridad
+# Definición de usuarios, grupos y políticas de seguridad
+# =========================================
+
+# =========================================
+# DEFINICIÓN DE USUARIOS DEL LABORATORIO
+# =========================================
+lab_usuarios:
+  # Administrador principal del laboratorio
+  - username: "labadmin"
+    fullname: "Administrador del Laboratorio"
+    password: "{{ vault_labadmin_password | default('LabAdmin2024!Secure') }}"
+    groups:
+      - "academic_admin"
+      - "sudo"
+      - "adm"
+      - "systemd-journal"
+    shell: "/bin/bash"
+    sudo_config: "full"  # Privilegios completos sin contraseña
+    home_permissions: "0700"
+    password_never_expires: false
+    user_cannot_change_password: false
+
+  # Estudiante principal
+  - username: "lab_student"
+    fullname: "Estudiante de Laboratorio"
+    password: "{{ vault_student_password | default('Student2024!Lab') }}"
+    groups:
+      - "students"
+      - "lab_developers"
+    shell: "/bin/bash"
+    sudo_config: "limited"  # Privilegios limitados con contraseña
+    home_permissions: "0755"
+    password_never_expires: false
+    user_cannot_change_password: false
+
+  # Usuario para prácticas de servicios web
+  - username: "practice_user"
+    fullname: "Usuario de Prácticas Web"
+    password: "{{ vault_practice_password | default('Practice2024!Web') }}"
+    groups:
+      - "students"
+      - "practice"
+    shell: "/bin/bash"
+    sudo_config: "web_service"  # Solo servicios web sin contraseña
+    home_permissions: "0755"
+    password_never_expires: false
+    user_cannot_change_password: false
+
+# =========================================
+# DEFINICIÓN DE GRUPOS DEL LABORATORIO
+# =========================================
+lab_grupos:
+  # Grupo de estudiantes
+  - name: "students"
+    gid: 2000
+    description: "Grupo de estudiantes del laboratorio"
+
+  # Grupo de prácticas
+  - name: "practice"
+    gid: 2001
+    description: "Grupo para usuarios de prácticas web"
+
+  # Grupo de administradores académicos
+  - name: "academic_admin"
+    gid: 2002
+    description: "Administradores académicos del laboratorio"
+
+  # Grupo de desarrolladores
+  - name: "lab_developers"
+    gid: 2003
+    description: "Desarrolladores y usuarios avanzados del laboratorio"
+
+# =========================================
+# CONFIGURACIÓN DE POLÍTICAS DE CONTRASEÑAS
+# =========================================
+password_policies:
+  # Configuración Linux
+  linux:
+    min_length: 8
+    max_age: 90      # días
+    min_age: 1       # días
+    warn_age: 7      # días
+    history: 5       # contraseñas recordadas
+    complexity: true
+    dictionary_check: true
+
+  # Configuración Windows  
+  windows:
+    min_length: 8
+    max_age: 90      # días
+    min_age: 1       # días
+    history: 5       # contraseñas recordadas
+    complexity: true
+    lockout_threshold: 5    # intentos fallidos
+    lockout_duration: 30    # minutos
+
+# =========================================
+# CONFIGURACIÓN DE LÍMITES DE SISTEMA
+# =========================================
+system_limits:
+  # Límites para estudiantes
+  students:
+    nofile_soft: 1024
+    nofile_hard: 2048
+    nproc_soft: 256
+    nproc_hard: 512
+    
+  # Límites para administradores
+  academic_admin:
+    nofile_soft: 4096
+    nofile_hard: 8192
+    nproc_soft: 1024
+    nproc_hard: 2048
+    
+  # Límites para desarrolladores
+  lab_developers:
+    nofile_soft: 2048
+    nofile_hard: 4096
+    nproc_soft: 512
+    nproc_hard: 1024
+
+# =========================================
+# CONFIGURACIÓN DE AUDITORÍA
+# =========================================
+audit_config:
+  enable_sudo_logging: true
+  sudo_log_file: "/var/log/sudo.log"
+  enable_user_activity_logging: true
+  activity_log_file: "/var/log/user_activity.log"
+  log_retention_days: 30
+
+# =========================================
+# SERVICIOS A DESHABILITAR (SEGURIDAD)
+# =========================================
+disabled_services:
+  linux:
+    - "avahi-daemon"    # Descubrimiento de red
+    - "cups"           # Sistema de impresión
+    - "bluetooth"      # Conectividad Bluetooth
+    
+  windows:
+    - "Fax"
+    - "TapiSrv" 
+    - "Telnet"
+    - "RemoteRegistry"
+    - "Browser"
+
+# =========================================
+# CONFIGURACIÓN DE DIRECTORIO HOME
+# =========================================
+home_directory_config:
+  create_shared_folders: true
+  shared_folders:
+    linux: "/home/lab_shared"
+    windows: "C:\\lab_shared"
+  
+  default_permissions:
+    admin: "0700"
+    student: "0755"
+    practice: "0755"

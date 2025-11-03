@@ -1,0 +1,43 @@
+# =========================================
+# CONFIGURACIÓN DE LÍMITES DE SISTEMA
+# Laboratorio: {{ inventory_hostname }}
+# Generado: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+# Límites para estudiantes
+@students        soft    nofile          {{ system_limits.students.nofile_soft }}
+@students        hard    nofile          {{ system_limits.students.nofile_hard }}
+@students        soft    nproc           {{ system_limits.students.nproc_soft }}
+@students        hard    nproc           {{ system_limits.students.nproc_hard }}
+
+# Límites para administradores académicos
+@academic_admin  soft    nofile          {{ system_limits.academic_admin.nofile_soft }}
+@academic_admin  hard    nofile          {{ system_limits.academic_admin.nofile_hard }}
+@academic_admin  soft    nproc           {{ system_limits.academic_admin.nproc_soft }}
+@academic_admin  hard    nproc           {{ system_limits.academic_admin.nproc_hard }}
+
+# Límites para desarrolladores
+@lab_developers  soft    nofile          {{ system_limits.lab_developers.nofile_soft }}
+@lab_developers  hard    nofile          {{ system_limits.lab_developers.nofile_hard }}
+@lab_developers  soft    nproc           {{ system_limits.lab_developers.nproc_soft }}
+@lab_developers  hard    nproc           {{ system_limits.lab_developers.nproc_hard }}
+
+# Límites específicos por usuario
+{% for usuario in lab_usuarios %}
+{{ usuario.username }}        soft    nofile          2048
+{{ usuario.username }}        hard    nofile          4096
+{{ usuario.username }}        soft    nproc           512
+{{ usuario.username }}        hard    nproc           1024
+{% endfor %}
+
+# Límites de memoria (prevenir ataques de agotamiento)
+*               soft    fsize           100000      # Tamaño máximo de archivos (KB)
+*               hard    fsize           200000
+*               soft    cpu             60          # Tiempo máximo de CPU (minutos)
+*               hard    cpu             120
+*               soft    data            102400      # Datos máximos en memoria (KB)
+*               hard    data            204800
+
+# Configuración de core dumps (deshabilitados por seguridad)
+*               soft    core            0
+*               hard    core            0

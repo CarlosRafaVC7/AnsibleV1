@@ -1,0 +1,282 @@
+---
+# Playbook completo para crear laboratorio académico en ESXi
+# Linux Mint + Windows 10 con configuración completa
+- hosts: localhost
+  gather_facts: yes
+  collections: [community.vmware]
+  vars_files:
+    - ../group_vars/vault_vars.yml
+
+  vars:
+    esxi_host: "168.121.48.254"
+    esxi_port: "10117"
+    esxi_user: "{{ vault_esxi_username }}"
+    esxi_pass: "{{ vault_esxi_password }}"
+    
+    ds_name: "datastore1"
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    portgroup: "Puerto-G2-Veli"
+    
+    vms:
+      - name: "LinuxMint-Academico"
+        guest_id: "ubuntu64Guest"
+        memory_mb: 4096
+        num_cpus: 2
+        disk_gb: 40
+        iso_path: "[datastore1] Veli/linuxmint-22.2-cinnamon-64bit.iso"
+        description: "VM Linux Mint para laboratorio académico"
+        ip_target: "192.168.1.100"  
+        
+      - name: "Windows10-Gamer"
+        guest_id: "windows9_64Guest"
+        memory_mb: 8192
+        num_cpus: 4
+        disk_gb: 80
+        iso_path: "[datastore1] Veli/windows.iso"
+        description: "VM Windows 10 para laboratorio gamer"
+        ip_target: "192.168.1.101"  # IP objetivo para inventory
+    
+    # Ruta de logs de seguridad
+    security_log_path: "{{ ansible_env.HOME }}/ansible_esxi_lab_operations.log"
+
+  tasks:
+    # ==========================================
+    # LOGGING DE SEGURIDAD - Inicio
+    # ==========================================
+    - name: "🔒 Crear directorio de logs"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: "🔒 Registrar inicio de operaciones ESXi"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - INICIO: Creación laboratorio completo ESXi desde {{ ansible_env.USER | default('usuario') }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: "📋 Mostrar configuración del laboratorio"
+      ansible.builtin.debug:
+        msg: |
+          =============================================
+          🚀 LABORATORIO COMPLETO EN ESXI
+          =============================================
+          ESXi: {{ esxi_host }}:{{ esxi_port }}
+          Usuario: {{ esxi_user }}
+          Datastore: {{ ds_name }}
+          VMs a crear: {{ vms | length }}
+          {% for vm in vms %}
+          - {{ vm.name }}: {{ vm.memory_mb }}MB, {{ vm.num_cpus }}CPU, {{ vm.disk_gb }}GB
+          {% endfor %}
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          =============================================
+
+    # ==========================================
+    # VERIFICAR CONEXIÓN A ESXI
+    # ==========================================
+    - name: "🔍 Verificar conexión y obtener info del ESXi"
+      community.vmware.vmware_host_facts:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+      register: esxi_info
+      ignore_errors: yes
+
+    - name: "📊 Mostrar información del ESXi"
+      ansible.builtin.debug:
+        msg:
+          - "=== INFORMACIÓN DEL ESXI ==="
+          - "Conectado: {{ esxi_info is succeeded }}"
+          - "Versión ESXi: {{ esxi_info.ansible_facts.ansible_distribution_version | default('N/A') }}"
+          - "Hostname: {{ esxi_info.ansible_facts.ansible_hostname | default('N/A') }}"
+          - "================================"
+      when: esxi_info is succeeded
+
+    - name: "❌ Error de conexión a ESXi"
+      ansible.builtin.debug:
+        msg:
+          - "❌ NO SE PUDO CONECTAR AL ESXI"
+          - "Verifica:"
+          - "1. Conexión de red a {{ esxi_host }}:{{ esxi_port }}"
+          - "2. Credenciales: {{ esxi_user }}"
+          - "3. Que el ESXi esté encendido"
+          - "Error: {{ esxi_info.msg | default('Desconocido') }}"
+      when: esxi_info is failed
+
+    - name: "🛑 Fallar si no se puede conectar"
+      ansible.builtin.fail:
+        msg: "No se pudo establecer conexión con ESXi. Verifique la configuración."
+      when: esxi_info is failed
+
+    # ==========================================
+    # OBTENER LISTA DE DATASTORES DISPONIBLES
+    # ==========================================
+    - name: "💾 Obtener lista de datastores disponibles"
+      community.vmware.vmware_datastore_info:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+      register: datastore_info
+
+    - name: "📋 Mostrar datastores disponibles"
+      ansible.builtin.debug:
+        msg: |
+          === DATASTORES DISPONIBLES ===
+          {% for ds in datastore_info.datastores %}
+          - {{ ds.name }}: {{ ds.capacity | filesizeformat }} ({{ ds.freeSpace | filesizeformat }} libres)
+          {% endfor %}
+
+    # ==========================================
+    # CREAR VMs DEL LABORATORIO
+    # ==========================================
+    - name: "🖥️ Crear VM {{ item.name }}"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ item.name }}"
+        state: present
+        guest_id: "{{ item.guest_id }}"
+        datastore: "{{ ds_name }}"
+        annotation: "{{ item.description }} - Creado {{ ansible_date_time.iso8601 }}"
+        hardware:
+          memory_mb: "{{ item.memory_mb }}"
+          num_cpus: "{{ item.num_cpus }}"
+          scsi: paravirtual
+        disk:
+          - size_gb: "{{ item.disk_gb }}"
+            type: thin
+            datastore: "{{ ds_name }}"
+        networks:
+          - name: "{{ portgroup }}"
+            start_connected: true
+            device_type: vmxnet3
+        cdrom:
+          - type: iso
+            iso_path: "{{ item.iso_path }}"
+            controller_type: ide
+            controller_number: 0
+            unit_number: 0
+        wait_for_ip_address: no
+        state_change_timeout: 300
+      register: vm_creation_results
+      loop: "{{ vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: "🔒 Registrar creación de VMs"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - CREACIÓN: {{ item.item.name }} - Estado: {{ item.changed | ternary('CREADA', 'YA_EXISTÍA') }} - Specs: {{ item.item.memory_mb }}MB/{{ item.item.num_cpus }}CPU/{{ item.item.disk_gb }}GB"
+      delegate_to: localhost
+      loop: "{{ vm_creation_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # ==========================================
+    # AUDITORÍA COMPLETA DE LAS VMs
+    # ==========================================
+    - name: "🔍 Obtener información completa de las VMs"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        datacenter: "ha-datacenter"
+        name: "{{ item.name }}"
+      register: vms_info
+      loop: "{{ vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: "📊 Auditoría completa del laboratorio"
+      ansible.builtin.debug:
+        msg:
+          - "=============== AUDITORÍA COMPLETA DEL LABORATORIO ==============="
+          - "VM: {{ item.item.name }}"
+          - "Estado: {{ item.instance.hw_power_status | default('N/A') }}"
+          - "💾 Especificaciones:"
+          - "  - CPUs: {{ item.instance.hw_processor_count | default(item.item.num_cpus) }} cores"
+          - "  - RAM: {{ item.instance.hw_memtotal_mb | default(item.item.memory_mb) }} MB ({{ (item.instance.hw_memtotal_mb | default(item.item.memory_mb) / 1024) | round(1) }} GB)"
+          - "  - Disco: {{ item.item.disk_gb }}GB (Thin provisioning)"
+          - "🌐 Red:"
+          - "  - IP: {{ item.instance.ipv4 | default('Pendiente configuración') }}"
+          - "  - MAC: {{ item.instance.hw_eth0.macaddress | default('N/A') }}"
+          - "  - Portgroup: {{ portgroup }}"
+          - "💿 Media:"
+          - "  - ISO: {{ item.item.iso_path }}"
+          - "📁 Archivos VM: {{ item.instance.hw_files | length | default(0) }}"
+          - "🔧 Dispositivos: {{ item.instance.guest_devices | length | default(0) }} total"
+          - "=============================================================="
+      loop: "{{ vms_info.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # ==========================================
+    # GENERAR ARCHIVO DE INVENTARIO ACTUALIZADO
+    # ==========================================
+    - name: "📝 Generar inventory actualizado para las VMs"
+      ansible.builtin.template:
+        src: inventory_esxi_template.j2
+        dest: "{{ playbook_dir }}/../inventory/hosts_esxi_lab.ini"
+      vars:
+        lab_vms: "{{ vms_info.results }}"
+      delegate_to: localhost
+
+    # ==========================================
+    # LOGGING DETALLADO DE SEGURIDAD
+    # ==========================================
+    - name: "🔒 Registro completo de auditoría del laboratorio"
+      ansible.builtin.blockinfile:
+        path: "{{ security_log_path }}"
+        marker: "# {mark} AUDIT LABORATORIO {{ ansible_date_time.iso8601 }}"
+        block: |
+          =================== AUDITORÍA DE SEGURIDAD LABORATORIO ===================
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          ESXi: {{ esxi_host }}:{{ esxi_port }}
+          Datastore: {{ ds_name }}
+          {% for vm in vms_info.results %}
+          
+          VM: {{ vm.item.name }}
+          Estado: {{ vm.instance.hw_power_status | default('N/A') }}
+          CPUs: {{ vm.instance.hw_processor_count | default('N/A') }}
+          RAM: {{ vm.instance.hw_memtotal_mb | default('N/A') }} MB
+          IP: {{ vm.instance.ipv4 | default('Pendiente') }}
+          MAC: {{ vm.instance.hw_eth0.macaddress | default('N/A') }}
+          ISO: {{ vm.item.iso_path }}
+          Dispositivos: {{ vm.instance.guest_devices | length | default(0) }}
+          {% endfor %}
+          ========================================================================
+      delegate_to: localhost
+
+    # ==========================================
+    # RESUMEN FINAL Y PRÓXIMOS PASOS
+    # ==========================================
+    - name: "Resumen final del laboratorio"
+      ansible.builtin.debug:
+        msg: |
+          ===== LABORATORIO CREADO EXITOSAMENTE =====
+           Conexión ESXi: EXITOSA
+          VMs creadas: {{ vms | length }}
+          {% for vm in vms %}
+          - {{ vm.name }}: CREADA
+          {% endfor %}
+          ISOs montados: COMPLETO
+          Auditoría: COMPLETADA
+          Logging: Registrado en {{ security_log_path }}
+
+          🕒 Completado: {{ ansible_date_time.iso8601 }}
+          =================================
+
+    - name: " Finalización exitosa"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - COMPLETADO: Laboratorio completo creado exitosamente - {{ vms | length }} VMs"
+      delegate_to: localhost

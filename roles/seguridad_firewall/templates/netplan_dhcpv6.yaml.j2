@@ -1,0 +1,98 @@
+# =========================================
+# CONFIGURACIÓN NETPLAN PARA DHCPv6 HÍBRIDO
+# Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}
+# Generado por Ansible: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+network:
+  version: 2
+  renderer: NetworkManager
+  
+  ethernets:
+    # Configuración para la interfaz principal (detectada automáticamente)
+    {{ ansible_default_ipv4.interface | default('eth0') }}:
+      # ===== CONFIGURACIÓN DHCPv6 PRINCIPAL =====
+      dhcp6: true                    # Habilitar DHCPv6 para IPv6 automático
+      accept-ra: true                # Aceptar Router Advertisements
+      dhcp6-overrides:
+        use-dns: true                # Usar DNS del DHCPv6
+        use-domains: true            # Usar dominios del DHCPv6
+        send-hostname: true          # Enviar hostname al servidor DHCPv6
+      
+      # ===== CONFIGURACIÓN IPv4 FALLBACK =====
+      dhcp4: true                    # DHCP IPv4 como fallback
+      dhcp4-overrides:
+        use-dns: false               # Priorizar DNS IPv6
+        use-routes: true             # Usar rutas IPv4
+        send-hostname: true          # Enviar hostname
+      
+      # ===== CONFIGURACIÓN DE DNS HÍBRIDA =====
+      nameservers:
+        addresses:
+          # DNS IPv6 primarios
+          - "2001:4860:4860::8888"   # Google DNS IPv6
+          - "2001:4860:4860::8844"   # Google DNS IPv6 secundario
+          - "2606:4700:4700::1111"   # Cloudflare DNS IPv6
+          - "2606:4700:4700::1001"   # Cloudflare DNS IPv6 secundario
+          # DNS IPv4 fallback
+          - "8.8.8.8"                # Google DNS IPv4
+          - "8.8.4.4"                # Google DNS IPv4 secundario
+          - "1.1.1.1"                # Cloudflare DNS IPv4
+        search:
+          - "{{ network_config.domain | default('lab.local') }}"
+          - "local"
+      
+      # ===== CONFIGURACIÓN DE RUTAS =====
+      routes:
+        # Ruta específica para la red de gestión (si aplica)
+        {% if network_config.management_network is defined %}
+        - to: "{{ network_config.management_network }}"
+          via: "{{ network_config.gateway_ipv4 | default('192.168.1.1') }}"
+          metric: 100
+        {% endif %}
+      
+      # ===== CONFIGURACIÓN IPv6 ESPECÍFICA =====
+      ipv6-privacy: false            # Deshabilitar privacy extensions
+      ipv6-address-generation: eui64 # Usar EUI-64 para identificadores
+      
+      # ===== PARÁMETROS DE RED ADICIONALES =====
+      link-local: [ipv4, ipv6]       # Habilitar link-local para ambos
+      
+      {% if network_config.static_backup is defined and network_config.static_backup %}
+      # ===== CONFIGURACIÓN ESTÁTICA DE BACKUP =====
+      addresses:
+        - "{{ network_config.ipv4_backup | default('192.168.1.100/24') }}"
+        - "{{ network_config.ipv6_backup | default('fe80::100/64') }}"
+      {% endif %}
+
+# =========================================
+# CONFIGURACIÓN DE WIFI (SI APLICA)
+# =========================================
+{% if network_config.wifi_enabled | default(false) %}
+  wifis:
+    wlan0:
+      dhcp6: true
+      dhcp4: true
+      access-points:
+        "{{ network_config.wifi_ssid }}":
+          password: "{{ network_config.wifi_password }}"
+      nameservers:
+        addresses:
+          - "2001:4860:4860::8888"
+          - "8.8.8.8"
+{% endif %}
+
+# =========================================
+# CONFIGURACIÓN DE BRIDGE (SI APLICA)  
+# =========================================
+{% if network_config.bridge_enabled | default(false) %}
+  bridges:
+    br0:
+      dhcp6: true
+      dhcp4: true
+      interfaces:
+        - "{{ ansible_default_ipv4.interface | default('eth0') }}"
+      parameters:
+        stp: false                   # Deshabilitar Spanning Tree Protocol
+        forward-delay: 0             # Sin delay de forwarding
+{% endif %}

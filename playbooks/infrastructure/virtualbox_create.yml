@@ -28,10 +28,10 @@
     vbox_macos_cpus: 2
     vbox_macos_disk: 61440  # MB
     
-    # Rutas de ISOs locales (opcional)
-    # ubuntu_iso_local_path: "/path/to/ubuntu-24.04.3-live-server-amd64.iso"
-    # windows_iso_local_path: "/path/to/windows-11-pro.iso"
-    # macos_iso_local_path: "/path/to/macOS-Mojave.iso"
+    # Rutas de ISOs locales - ACTUALIZAR CON TUS RUTAS REALES
+    ubuntu_iso_local_path: "C:/Users/Carlos/Downloads/ubuntu-24.04.3-live-server-amd64.iso"
+    windows_iso_local_path: "C:/Users/Carlos/Downloads/windows-11-pro.iso"
+    # macos_iso_local_path: "C:/Users/Carlos/Downloads/macOS-Mojave.iso"
     
     # Opciones de creación
     create_vbox_academico: true

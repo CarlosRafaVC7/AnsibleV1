@@ -1,0 +1,175 @@
+---
+# =========================================
+# CONFIGURACIÓN DE RED COMÚN DHCPv6
+# Compatible con Linux y Windows
+# Propósito: Red híbrida IPv6/IPv4 con DHCPv6
+# =========================================
+
+- name: "🌐 CONFIGURACIÓN DE RED DHCPv6 COMÚN"
+  ansible.builtin.debug:
+    msg:
+      - "🌐 Aplicando configuración de red DHCPv6 híbrida"
+      - "📋 Host: {{ inventory_hostname }}"
+      - "🖥️  Sistema: {{ ansible_system }}"
+
+# =========================================
+# CONFIGURACIÓN COMÚN DE CONECTIVIDAD
+# =========================================
+
+- name: "🔍 Verificar conectividad de red actual"
+  ansible.builtin.ping:
+  tags:
+    - red
+    - conectividad
+
+- name: "📊 Mostrar información de red actual"
+  ansible.builtin.setup:
+    filter: ansible_default_ipv*
+  register: network_info
+  tags:
+    - red
+    - informacion
+
+- name: "🌐 Verificar soporte IPv6 del sistema"
+  ansible.builtin.shell: |
+    {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+    ip -6 addr show | grep inet6 | head -3
+    {% elif ansible_os_family == "Windows" %}
+    Get-NetIPAddress -AddressFamily IPv6 | Where-Object {$_.IPAddress -notlike "fe80:*"} | Select-Object IPAddress | ConvertTo-Json -Compress
+    {% endif %}
+  register: ipv6_check
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - red
+    - ipv6
+
+# =========================================
+# CONFIGURACIÓN DE DNS HÍBRIDO
+# =========================================
+
+- name: "🔧 Configurar resolución DNS híbrida IPv6/IPv4"
+  block:
+    # Configuración DNS para Linux
+    - name: "🐧 Configurar DNS en Linux (systemd-resolved)"
+      ansible.builtin.template:
+        src: resolved.conf.j2
+        dest: /etc/systemd/resolved.conf
+        backup: true
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: ansible_os_family == "Debian" or ansible_distribution == "Ubuntu"
+      notify: restart_systemd_resolved
+
+    # Configuración DNS para Windows ya está en windows_firewall.yml
+    
+  tags:
+    - dns
+    - resolucion
+
+# =========================================
+# CONFIGURACIÓN DE ROUTING Y GATEWAY
+# =========================================
+
+- name: "🛤️ Configurar tabla de rutas para red híbrida"
+  ansible.builtin.shell: |
+    {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+    # Verificar rutas IPv6 actuales
+    ip -6 route show | head -5
+    
+    # Configurar ruta por defecto IPv6 si está disponible
+    if ip -6 addr show | grep -q "2001:"; then
+        echo "IPv6 global disponible"
+    else
+        echo "Esperando configuración DHCPv6"
+    fi
+    {% elif ansible_os_family == "Windows" %}
+    # Verificar tabla de rutas IPv6
+    Get-NetRoute -AddressFamily IPv6 | Where-Object {$_.DestinationPrefix -eq "::/0"} | Select-Object NextHop | ConvertTo-Json -Compress
+    {% endif %}
+  register: routing_info
+  changed_when: false
+  tags:
+    - routing
+    - gateway
+
+# =========================================
+# CONFIGURACIÓN DE TIEMPO Y NTP
+# =========================================
+
+- name: "⏰ Configurar sincronización de tiempo con servidores NTP"
+  block:
+    # Configuración NTP para Linux
+    - name: "🐧 Configurar NTP en Linux"
+      ansible.builtin.shell: |
+        # Configurar timesyncd (systemd)
+        timedatectl set-ntp true
+        
+        # Verificar sincronización
+        timedatectl status | grep "Network time"
+      become: true
+      when: ansible_os_family == "Debian" or ansible_distribution == "Ubuntu"
+
+    # Configuración NTP para Windows
+    - name: "🪟 Configurar NTP en Windows"
+      ansible.windows.win_shell: |
+        # Configurar servidor NTP
+        w32tm /config /manualpeerlist:"pool.ntp.org time.cloudflare.com" /syncfromflags:manual /reliable:yes /update
+        
+        # Reiniciar servicio de tiempo
+        Restart-Service w32time
+        
+        # Sincronizar inmediatamente
+        w32tm /resync
+      when: ansible_os_family == "Windows"
+
+  tags:
+    - ntp
+    - tiempo
+
+# =========================================
+# PRUEBAS DE CONECTIVIDAD FINAL
+# =========================================
+
+- name: "🔍 Probar conectividad IPv6 e IPv4"
+  ansible.builtin.shell: |
+    {% if ansible_os_family == "Debian" or ansible_distribution == "Ubuntu" %}
+    # Prueba ping IPv6
+    echo "=== Prueba IPv6 ==="
+    ping6 -c 2 2001:4860:4860::8888 2>/dev/null || echo "IPv6 no disponible aún"
+    
+    # Prueba ping IPv4
+    echo "=== Prueba IPv4 ==="
+    ping -c 2 8.8.8.8 2>/dev/null || echo "IPv4 no disponible"
+    {% elif ansible_os_family == "Windows" %}
+    # Prueba ping IPv6
+    Write-Output "=== Prueba IPv6 ==="
+    Test-NetConnection -ComputerName "2001:4860:4860::8888" -Port 53 -InformationLevel Quiet 2>$null
+    
+    # Prueba ping IPv4  
+    Write-Output "=== Prueba IPv4 ==="
+    Test-NetConnection -ComputerName "8.8.8.8" -Port 53 -InformationLevel Quiet 2>$null
+    {% endif %}
+  register: connectivity_test
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - validacion
+    - conectividad
+
+- name: "📊 Mostrar resumen de configuración de red"
+  ansible.builtin.debug:
+    msg:
+      - "🌐 Configuración de red DHCPv6 completada"
+      - "📋 Host: {{ inventory_hostname }}"
+      - "🖥️  Sistema: {{ ansible_system }}"
+      - "📡 IPv6: {{ 'Detectado' if '2001:' in ipv6_check.stdout else 'DHCPv6 en progreso' }}"
+      - "📡 IPv4: {{ ansible_default_ipv4.address | default('DHCP en progreso') }}"
+      - "🔧 DNS: Configurado para resolución híbrida"
+      - "⏰ NTP: Sincronización habilitada"
+      - "✅ Conectividad: {{ 'OK' if connectivity_test.rc == 0 else 'En configuración' }}"
+  tags:
+    - resumen
+    - red

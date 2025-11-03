@@ -1,0 +1,125 @@
+# =========================================
+# CONFIGURACIÓN FAIL2BAN PARA LABORATORIO
+# Generado por Ansible: {{ ansible_date_time.iso8601 }}
+# Host: {{ inventory_hostname }}
+# =========================================
+
+[DEFAULT]
+# Tiempo de banneo (segundos)
+bantime = 1800          # 30 minutos de bloqueo
+
+# Ventana de tiempo para contar fallos (segundos)  
+findtime = 600          # 10 minutos de ventana
+
+# Número máximo de intentos fallidos antes del banneo
+maxretry = 3            # Máximo 3 intentos
+
+# IPs a ignorar (nunca banear)
+ignoreip = 127.0.0.1/8 192.168.1.0/24 ::1
+
+# Configuración de logging
+logtarget = /var/log/fail2ban.log
+loglevel = INFO
+
+# Configuración de email (opcional)
+# mta = sendmail
+# sender = fail2ban@{{ ansible_fqdn }}
+# destemail = admin@{{ ansible_domain | default('lab.local') }}
+
+# =========================================
+# PROTECCIÓN SSH PRINCIPAL
+# =========================================
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 1800          # 30 minutos
+findtime = 600          # 10 minutos
+action = %(action_mwl)s  # Ban + envío de email con logs
+
+# =========================================
+# PROTECCIÓN ADICIONAL PARA SERVICIOS WEB
+# =========================================
+[apache-auth]
+enabled = true
+port = http,https
+filter = apache-auth
+logpath = /var/log/apache2/*error.log
+maxretry = 5
+bantime = 3600          # 1 hora para ataques web
+
+[apache-badbots]
+enabled = true
+port = http,https
+filter = apache-badbots
+logpath = /var/log/apache2/*access.log
+maxretry = 2
+bantime = 86400         # 24 horas para bots maliciosos
+
+[apache-noscript]
+enabled = true
+port = http,https
+filter = apache-noscript
+logpath = /var/log/apache2/*access.log
+maxretry = 6
+bantime = 86400
+
+# =========================================
+# PROTECCIÓN CONTRA ATAQUES DE FUERZA BRUTA
+# =========================================
+[ssh-ddos]
+enabled = true
+port = ssh
+filter = sshd-ddos
+logpath = /var/log/auth.log
+maxretry = 2
+bantime = 7200          # 2 horas para ataques DDoS
+
+# =========================================
+# ACCIONES PERSONALIZADAS
+# =========================================
+[ssh-iptables-multiport]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+action = iptables-multiport[name=SSH, port="ssh", protocol=tcp]
+         %(action_mwl)s
+maxretry = 3
+bantime = 1800
+
+# =========================================
+# CONFIGURACIÓN ESPECÍFICA DEL LABORATORIO
+# =========================================
+{% if firewall_config.enable_web_protection | default(true) %}
+[nginx-http-auth]
+enabled = true
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = 5
+bantime = 3600
+
+[nginx-limit-req] 
+enabled = true
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+bantime = 600           # 10 minutos para rate limiting
+{% endif %}
+
+# =========================================
+# NOTIFICACIONES Y ALERTAS
+# =========================================
+{% if firewall_config.enable_email_alerts | default(false) %}
+[DEFAULT]
+# Configurar notificaciones por email
+action_mw = %(banaction)s[name=%(__name__)s, port="%(port)s", protocol="%(protocol)s", chain="%(chain)s"]
+            %(mta)s-whois[name=%(__name__)s, dest="%(destemail)s", sender="%(sender)s"]
+
+action_mwl = %(banaction)s[name=%(__name__)s, port="%(port)s", protocol="%(protocol)s", chain="%(chain)s"]
+             %(mta)s-whois-lines[name=%(__name__)s, dest="%(destemail)s", logpath=%(logpath)s, chain="%(chain)s", sender="%(sender)s"]
+{% endif %}

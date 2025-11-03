@@ -1,0 +1,69 @@
+# =========================================
+# CONFIGURACIÓN SYSTEMD-RESOLVED PARA DNS HÍBRIDO
+# Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}
+# Generado por Ansible: {{ ansible_date_time.iso8601 }}
+# =========================================
+
+[Resolve]
+# ===== CONFIGURACIÓN DE DNS HÍBRIDA IPv6/IPv4 =====
+
+# Servidores DNS principales (IPv6 preferido)
+DNS=2001:4860:4860::8888 2001:4860:4860::8844 2606:4700:4700::1111 2606:4700:4700::1001 8.8.8.8 8.8.4.4 1.1.1.1
+
+# Dominios de búsqueda
+Domains={{ network_config.domain | default('lab.local') }} local
+
+# ===== CONFIGURACIÓN DE RESOLUCIÓN =====
+
+# Habilitar DNS over TLS (seguridad adicional)
+{% if network_config.dns_over_tls | default(false) %}
+DNS=cloudflare-dns.com#2606:4700:4700::1111
+DNS=dns.google#2001:4860:4860::8888
+DNSSEC=yes
+DNSOverTLS=yes
+{% else %}
+DNSSEC=yes
+DNSOverTLS=no
+{% endif %}
+
+# ===== CONFIGURACIÓN DE CACHE =====
+
+# Habilitar cache DNS local
+Cache=yes
+
+# Tamaño del cache DNS (entradas)
+CacheFromLocalhost=no
+
+# ===== CONFIGURACIÓN ESPECÍFICA DEL LABORATORIO =====
+
+# Resolución de nombres locales
+MulticastDNS=yes                    # Habilitar mDNS (.local)
+LLMNR=yes                           # Habilitar LLMNR (Windows compatibility)
+
+# ===== CONFIGURACIÓN DE FALLBACK =====
+
+# DNS fallback si los principales fallan
+FallbackDNS=1.0.0.1 1.1.1.1 8.8.4.4 208.67.222.222
+
+# ===== CONFIGURACIÓN DE STUB =====
+
+# Listener para consultas locales
+DNSStubListener=yes
+DNSStubListenerExtra=127.0.0.53
+
+# ===== CONFIGURACIÓN DE SEGURIDAD =====
+
+# Validación de respuestas DNS
+{% if network_config.dns_validation | default(true) %}
+DNSSEC=yes
+DNSSECNegativeTrustAnchors=
+{% else %}
+DNSSEC=no
+{% endif %}
+
+# ===== LOGGING Y DEBUG =====
+{% if network_config.dns_debug | default(false) %}
+# Habilitar logging detallado para debugging
+ReadEtcHosts=yes
+ResolveUnicastSingleLabel=no
+{% endif %}

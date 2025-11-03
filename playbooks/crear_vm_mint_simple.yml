@@ -1,0 +1,232 @@
+---
+# Playbook simplificado para crear UNA VM Linux Mint
+- hosts: localhost
+  gather_facts: yes
+  collections: [community.vmware]
+  vars_files:
+    - ../group_vars/vault_vars.yml
+
+  vars:
+    # Tu configuración ESXi real
+    esxi_host: "168.121.48.254"
+    esxi_port: "10117"
+    esxi_user: "{{ vault_esxi_username }}"
+    esxi_pass: "{{ vault_esxi_password }}"
+    
+    # Configuración del datastore confirmada
+    ds_name: "datastore1"
+    esxi_hostname_fqdn: "localhost.lim.upeu.edu.pe"
+    
+    # Tu VM única con especificaciones académicas
+    vm_name: "LinuxMint-Lab-Academico"
+    iso_path: "[datastore1] Veli/linuxmint-22.2-cinnamon-64bit.iso"
+    portgroup: "VM Network"
+    
+    # Ruta de logs de seguridad
+    security_log_path: "{{ ansible_env.HOME }}/ansible_esxi_operations.log"
+
+  tasks:
+    # ==========================================
+    # LOGGING DE SEGURIDAD - Inicio
+    # ==========================================
+    - name: "🔒 Crear directorio de logs"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: "🔒 Registrar inicio de operaciones ESXi"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - INICIO: Operaciones ESXi desde {{ ansible_env.USER | default('usuario') }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: "📋 Mostrar configuración inicial"
+      ansible.builtin.debug:
+        msg:
+          - "============================================="
+          - "🔒 GESTIÓN SEGURA DE VM EN ESXI"
+          - "============================================="
+          - "ESXi: {{ esxi_host }}:{{ esxi_port }}"
+          - "Usuario: {{ esxi_user }}"
+          - "VM a crear: {{ vm_name }}"
+          - "Datastore: {{ ds_name }}"
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "============================================="
+
+    # ==========================================
+    # VERIFICAR CONEXIÓN A ESXI
+    # ==========================================
+    - name: "🔍 Verificar conexión y obtener info del ESXi"
+      community.vmware.vmware_host_facts:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+      register: esxi_info
+      ignore_errors: yes
+
+    - name: "📊 Mostrar información del ESXi"
+      ansible.builtin.debug:
+        msg:
+          - "=== INFORMACIÓN DEL ESXI ==="
+          - "Conectado: {{ esxi_info is succeeded }}"
+          - "Versión ESXi: {{ esxi_info.ansible_facts.ansible_distribution_version | default('N/A') }}"
+          - "Hostname: {{ esxi_info.ansible_facts.ansible_hostname | default('N/A') }}"
+          - "================================"
+      when: esxi_info is succeeded
+
+    - name: "❌ Error de conexión a ESXi"
+      ansible.builtin.debug:
+        msg:
+          - "❌ NO SE PUDO CONECTAR AL ESXI"
+          - "Verifica:"
+          - "1. Conexión de red a {{ esxi_host }}:{{ esxi_port }}"
+          - "2. Credenciales: {{ esxi_user }}"
+          - "3. Que el ESXi esté encendido"
+          - "Error: {{ esxi_info.msg | default('Desconocido') }}"
+      when: esxi_info is failed
+
+    # ==========================================
+    # OBTENER LISTA DE DATASTORES DISPONIBLES
+    # ==========================================
+    - name: "💾 Obtener lista de datastores disponibles"
+      community.vmware.vmware_datastore_info:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+      register: datastore_info
+      when: esxi_info is succeeded
+
+    - name: "📋 Mostrar datastores disponibles"
+      ansible.builtin.debug:
+        msg: |
+          === DATASTORES DISPONIBLES ===
+          {% for ds in datastore_info.datastores %}
+          - {{ ds.name }}: {{ ds.capacity | filesizeformat }} ({{ ds.freeSpace | filesizeformat }} libres)
+          {% endfor %}
+      when: esxi_info is succeeded and datastore_info is defined
+
+    # ==========================================
+    # CREAR VM LINUX MINT CON ISO
+    # ==========================================
+    - name: "🐧 Crear VM Linux Mint Académico"
+      community.vmware.vmware_guest:
+        hostname: "{{ esxi_host }}:{{ esxi_port }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_hostname_fqdn }}"
+        folder: "/"
+        name: "{{ vm_name }}"
+        state: present
+        guest_id: "ubuntu64Guest"
+        datastore: "{{ ds_name }}"
+        hardware:
+          memory_mb: 4096      # 4GB RAM - Óptimo para Linux Mint
+          num_cpus: 2          # 2 CPUs - Adecuado para laboratorio
+          scsi: paravirtual
+        disk:
+          - size_gb: 40        # 40GB SSD - Espacio generoso para OS + apps
+            type: thin         # Thin provisioning - Solo usa espacio necesario
+            datastore: "{{ ds_name }}"
+        networks:
+          - name: "{{ portgroup }}"
+            start_connected: true
+            device_type: vmxnet3  # Controlador optimizado VMware
+        cdrom:
+          - type: iso
+            iso_path: "{{ iso_path }}"
+            controller_type: ide
+            controller_number: 0
+            unit_number: 0
+        wait_for_ip_address: no
+        state_change_timeout: 300  # Más tiempo para creación con ISO
+      register: vm_creation_result
+      when: esxi_info is succeeded
+
+    - name: "🔒 Registrar creación de VM"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - CREACIÓN: {{ vm_name }} - Estado: {{ vm_creation_result.changed | ternary('CREADA', 'YA_EXISTÍA') }}"
+      delegate_to: localhost
+      when: vm_creation_result is defined
+
+    # ==========================================
+    # AUDITORÍA COMPLETA DE LA VM
+    # ==========================================
+    - name: "🔍 Obtener información completa de la VM"
+      community.vmware.vmware_guest_info:
+        hostname: "{{ esxi_host }}"
+        username: "{{ esxi_user }}"
+        password: "{{ esxi_pass }}"
+        validate_certs: no
+        name: "{{ vm_name }}"
+      register: vm_info
+      when: esxi_info is succeeded
+
+    - name: "📊 Auditoría completa de dispositivos y especificaciones"
+      ansible.builtin.debug:
+        msg:
+          - "=============== AUDITORÍA DE VM ACADÉMICA ==============="
+          - "Nombre: {{ vm_name }}"
+          - "Estado: {{ vm_info.instance.hw_power_status | default('N/A') }}"
+          - "💾 Especificaciones:"
+          - "  - CPUs: {{ vm_info.instance.hw_processor_count | default('2') }} cores"
+          - "  - RAM: {{ vm_info.instance.hw_memtotal_mb | default('4096') }} MB ({{ (vm_info.instance.hw_memtotal_mb | default(4096) / 1024) | round(1) }} GB)"
+          - "  - Disco: 40GB SSD (Thin provisioning)"
+          - "🌐 Red:"
+          - "  - IP: {{ vm_info.instance.ipv4 | default('Sin IP asignada aún') }}"
+          - "  - MAC: {{ vm_info.instance.hw_eth0.macaddress | default('N/A') }}"
+          - "  - Portgroup: {{ portgroup }}"
+          - "💿 Media:"
+          - "  - ISO: {{ iso_path }}"
+          - "  - CD/DVD: {{ (vm_info.instance.guest_devices | selectattr('type','equalto','cdrom') | list) | length }} dispositivo(s)"
+          - "📁 Archivos VM: {{ vm_info.instance.hw_files | length | default(0) }}"
+          - "🔧 Dispositivos: {{ vm_info.instance.guest_devices | length | default(0) }} total"
+          - "=================================================="
+      when: vm_info is defined and vm_info.instance is defined
+
+    # ==========================================
+    # LOGGING DETALLADO DE SEGURIDAD
+    # ==========================================
+    - name: "🔒 Registro completo de auditoría"
+      ansible.builtin.blockinfile:
+        path: "{{ security_log_path }}"
+        marker: "# {mark} AUDIT {{ vm_name }} {{ ansible_date_time.iso8601 }}"
+        block: |
+          =================== AUDITORÍA DE SEGURIDAD VM ===================
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          VM: {{ vm_name }}
+          Estado: {{ vm_info.instance.hw_power_status | default('N/A') }}
+          CPUs: {{ vm_info.instance.hw_processor_count | default('N/A') }}
+          RAM: {{ vm_info.instance.hw_memtotal_mb | default('N/A') }} MB
+          IP: {{ vm_info.instance.ipv4 | default('Sin IP') }}
+          MAC: {{ vm_info.instance.hw_eth0.macaddress | default('N/A') }}
+          Dispositivos auditados: {{ vm_info.instance.guest_devices | length | default(0) }}
+          ================================================================
+      delegate_to: localhost
+      when: vm_info is defined and vm_info.instance is defined
+
+    # ==========================================
+    # RESUMEN FINAL
+    # ==========================================
+    - name: "✅ Resumen final de operaciones"
+      ansible.builtin.debug:
+        msg:
+          - "🔒 ===== RESUMEN DE OPERACIONES ====="
+          - "✅ Conexión ESXi: {{ esxi_info is succeeded | ternary('EXITOSA', 'FALLIDA') }}"
+          - "✅ VM {{ vm_name }}: {{ vm_creation_result.changed | default(false) | ternary('CREADA', 'YA_EXISTÍA') }}"
+          - "✅ Auditoría: {{ vm_info is defined | ternary('COMPLETADA', 'PENDIENTE') }}"
+          - "✅ Logging: Registrado en {{ security_log_path }}"
+          - "🕒 Completado: {{ ansible_date_time.iso8601 }}"
+          - "================================="
+
+    - name: "🔒 Finalización exitosa"
+      ansible.builtin.lineinfile:
+        path: "{{ security_log_path }}"
+        line: "{{ ansible_date_time.iso8601 }} - COMPLETADO: Operaciones finalizadas exitosamente"
+      delegate_to: localhost

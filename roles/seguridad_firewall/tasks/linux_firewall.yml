@@ -1,0 +1,368 @@
+---
+# =========================================
+# CONFIGURACIÓN DE FIREWALL Y SEGURIDAD - LINUX
+# Sistema: Ubuntu/Mint
+# Propósito: Firewall, antivirus, fail2ban y red segura
+# =========================================
+
+- name: "🐧 INICIANDO CONFIGURACIÓN DE SEGURIDAD LINUX"
+  ansible.builtin.debug:
+    msg:
+      - "🐧 Configurando firewall, antivirus y red en Linux"
+      - "📋 Distribución: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "🌐 Red actual: DHCPv6 con IPv4 fallback"
+
+# =========================================
+# INSTALACIÓN DE PAQUETES DE SEGURIDAD
+# =========================================
+
+- name: "📦 Instalar paquetes de seguridad y firewall"
+  ansible.builtin.apt:
+    name:
+      # Firewall y red
+      - ufw                    # Firewall simplificado para Ubuntu
+      - iptables              # Firewall avanzado
+      - iptables-persistent   # Persistencia de reglas iptables
+      - netfilter-persistent  # Gestión de reglas netfilter
+      # Antivirus
+      - clamav               # Motor antivirus
+      - clamav-daemon        # Demonio de ClamAV
+      - clamav-freshclam     # Actualizador de firmas
+      - clamav-unofficial-sigs # Firmas no oficiales adicionales
+      # Protección SSH
+      - fail2ban             # Protección contra ataques de fuerza bruta
+      # Red y conectividad
+      - netplan.io           # Configuración de red
+      - net-tools            # Herramientas de red clásicas
+      - iputils-ping         # Herramienta ping
+      - dnsutils             # Herramientas DNS
+    state: present
+    update_cache: true
+  become: true
+  tags:
+    - paquetes
+    - firewall
+    - antivirus
+
+# =========================================
+# CONFIGURACIÓN DE UFW (FIREWALL SIMPLIFICADO)
+# =========================================
+
+- name: "🔥 Restablecer UFW a configuración por defecto"
+  community.general.ufw:
+    state: reset
+  become: true
+  tags:
+    - firewall
+    - ufw
+
+- name: "🔒 Configurar política por defecto UFW (DENEGAR TODO)"
+  community.general.ufw:
+    policy: deny
+    direction: "{{ item }}"
+  loop:
+    - incoming    # Denegar todo tráfico entrante por defecto
+    - outgoing    # Permitir todo tráfico saliente por defecto se cambiará después
+  become: true
+  tags:
+    - firewall
+    - politicas
+
+- name: "✅ Permitir SSH solo desde red autorizada (192.168.1.0/24)"
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    src: "{{ item }}"
+    comment: "SSH desde red autorizada"
+  loop:
+    - "192.168.1.0/24"      # Red local permitida
+    - "127.0.0.1"           # Localhost siempre permitido
+  become: true
+  tags:
+    - firewall
+    - ssh
+
+- name: "🌐 Permitir puertos seguros para servicios web"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "80", proto: "tcp", comment: "HTTP - Servidor web Apache/Nginx" }
+    - { port: "443", proto: "tcp", comment: "HTTPS - Servidor web seguro" }
+    - { port: "53", proto: "udp", comment: "DNS - Resolución de nombres" }
+    - { port: "123", proto: "udp", comment: "NTP - Sincronización de tiempo" }
+  become: true
+  tags:
+    - firewall
+    - servicios
+
+- name: "🚫 Denegar puertos peligrosos explícitamente"
+  community.general.ufw:
+    rule: deny
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "23", proto: "tcp", comment: "DENEGAR Telnet - Protocolo inseguro" }
+    - { port: "21", proto: "tcp", comment: "DENEGAR FTP - Protocolo sin cifrado" }
+    - { port: "135", proto: "tcp", comment: "DENEGAR RPC Endpoint - Windows legacy" }
+    - { port: "139", proto: "tcp", comment: "DENEGAR NetBIOS - Protocolo legacy" }
+    - { port: "445", proto: "tcp", comment: "DENEGAR SMB - Compartición Windows" }
+    - { port: "1433", proto: "tcp", comment: "DENEGAR SQL Server - Base de datos" }
+    - { port: "3389", proto: "tcp", comment: "DENEGAR RDP - Escritorio remoto Windows" }
+  become: true
+  tags:
+    - firewall
+    - seguridad
+
+- name: "🔥 Habilitar UFW firewall"
+  community.general.ufw:
+    state: enabled
+    logging: "on"  # Habilitar logging para auditoría
+  become: true
+  tags:
+    - firewall
+    - activacion
+
+# =========================================
+# CONFIGURACIÓN AVANZADA DE IPTABLES
+# =========================================
+
+- name: "⚙️ Configurar reglas avanzadas de iptables"
+  ansible.builtin.iptables:
+    chain: "{{ item.chain }}"
+    rule: "{{ item.rule }}"
+    jump: "{{ item.jump }}"
+    comment: "{{ item.comment }}"
+  loop:
+    # Protección contra ataques de red
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL NONE", jump: "DROP", comment: "Anti NULL packets attack" }
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL ALL", jump: "DROP", comment: "Anti XMAS packets attack" }
+    - { chain: "INPUT", rule: "-p tcp --tcp-flags ALL FIN,URG,PSH", jump: "DROP", comment: "Anti stealth scans" }
+    
+    # Protección contra flood de conexiones
+    - { chain: "INPUT", rule: "-p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH", jump: "ACCEPT", comment: "SSH rate limiting setup" }
+    - { chain: "INPUT", rule: "-p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 --rttl --name SSH", jump: "DROP", comment: "SSH rate limiting drop" }
+    
+    # Protección ICMP limitada
+    - { chain: "INPUT", rule: "-p icmp --icmp-type echo-request -m limit --limit 1/s --limit-burst 2", jump: "ACCEPT", comment: "Ping limitado anti-flood" }
+    
+    # Conexiones establecidas siempre permitidas
+    - { chain: "INPUT", rule: "-m state --state ESTABLISHED,RELATED", jump: "ACCEPT", comment: "Permitir conexiones establecidas" }
+  become: true
+  tags:
+    - iptables
+    - proteccion
+
+- name: "💾 Guardar reglas de iptables permanentemente"
+  ansible.builtin.shell: |
+    iptables-save > /etc/iptables/rules.v4
+    ip6tables-save > /etc/iptables/rules.v6
+  become: true
+  tags:
+    - iptables
+    - persistencia
+
+# =========================================
+# CONFIGURACIÓN DE CLAMAV (ANTIVIRUS)
+# =========================================
+
+- name: "🦠 Detener ClamAV para configuración inicial"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - clamav-daemon
+    - clamav-freshclam
+  become: true
+  ignore_errors: true
+  tags:
+    - antivirus
+    - clamav
+
+- name: "🔄 Actualizar base de datos de firmas de ClamAV"
+  ansible.builtin.command: freshclam
+  become: true
+  timeout: 300  # 5 minutos timeout para descarga
+  ignore_errors: true  # Puede fallar si no hay internet
+  tags:
+    - antivirus
+    - actualizacion
+
+- name: "⚙️ Configurar ClamAV daemon"
+  ansible.builtin.lineinfile:
+    path: /etc/clamav/clamd.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: true
+  loop:
+    - { regexp: "^#LocalSocket", line: "LocalSocket /var/run/clamav/clamd.ctl" }
+    - { regexp: "^#User", line: "User clamav" }
+    - { regexp: "^#ScanPE", line: "ScanPE yes" }
+    - { regexp: "^#ScanELF", line: "ScanELF yes" }
+    - { regexp: "^#DetectPUA", line: "DetectPUA yes" }
+    - { regexp: "^#ScanArchive", line: "ScanArchive yes" }
+  become: true
+  notify: restart_clamav
+  tags:
+    - antivirus
+    - configuracion
+
+- name: "🕐 Configurar escaneo automático nocturno"
+  ansible.builtin.cron:
+    name: "ClamAV full system scan"
+    minute: "30"
+    hour: "2"
+    job: "/usr/bin/clamscan -r --bell -i --log=/var/log/clamav/scan.log --exclude-dir=^/sys --exclude-dir=^/proc /home /opt /tmp /var/log 2>&1"
+    user: root
+    cron_file: clamav_scan
+  become: true
+  tags:
+    - antivirus
+    - automatizacion
+
+- name: "🚀 Iniciar servicios de ClamAV"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop:
+    - clamav-freshclam    # Actualizador de firmas
+    - clamav-daemon       # Motor antivirus
+  become: true
+  tags:
+    - antivirus
+    - servicios
+
+# =========================================
+# CONFIGURACIÓN DE FAIL2BAN
+# =========================================
+
+- name: "🛡️ Configurar Fail2ban para protección SSH"
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: restart_fail2ban
+  tags:
+    - fail2ban
+    - proteccion
+
+- name: "📝 Crear configuración adicional de Fail2ban"
+  ansible.builtin.copy:
+    content: |
+      # Configuración personalizada para laboratorio
+      [DEFAULT]
+      # Tiempo de banneo aumentado para mayor seguridad
+      bantime = 1800          # 30 minutos
+      findtime = 600          # Ventana de 10 minutos
+      maxretry = 3            # Máximo 3 intentos
+      
+      # Configuración de logging
+      logtarget = /var/log/fail2ban.log
+      loglevel = INFO
+      
+      # Ignorar IPs locales
+      ignoreip = 127.0.0.1/8 192.168.1.0/24
+      
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 3
+      bantime = 1800
+      findtime = 600
+    dest: /etc/fail2ban/jail.d/laboratorio.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: restart_fail2ban
+  tags:
+    - fail2ban
+    - configuracion
+
+- name: "🚀 Iniciar y habilitar Fail2ban"
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+  tags:
+    - fail2ban
+    - servicios
+
+# =========================================
+# CONFIGURACIÓN DE RED DHCPv6 CON NETPLAN
+# =========================================
+
+- name: "🌐 Configurar red DHCPv6 con IPv4 fallback usando Netplan"
+  ansible.builtin.template:
+    src: netplan_dhcpv6.yaml.j2
+    dest: /etc/netplan/01-netcfg.yaml
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: apply_netplan
+  tags:
+    - red
+    - dhcpv6
+    - netplan
+
+# =========================================
+# VALIDACIÓN Y PRUEBAS DE CONECTIVIDAD
+# =========================================
+
+- name: "✅ Verificar estado de servicios de seguridad"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+  loop:
+    - ufw
+    - clamav-daemon
+    - fail2ban
+  register: services_status
+  become: true
+  tags:
+    - validacion
+    - servicios
+
+- name: "🔍 Probar conectividad básica"
+  ansible.builtin.ping:
+  tags:
+    - validacion
+    - conectividad
+
+- name: "📊 Mostrar estado de UFW"
+  ansible.builtin.command: ufw status verbose
+  register: ufw_status
+  become: true
+  changed_when: false
+  tags:
+    - validacion
+    - firewall
+
+- name: "📋 Mostrar información de configuración completada"
+  ansible.builtin.debug:
+    msg:
+      - "✅ Configuración de seguridad Linux completada"
+      - "🔥 UFW Firewall: {{ 'ACTIVO' if 'Status: active' in ufw_status.stdout else 'INACTIVO' }}"
+      - "🦠 ClamAV: {{ 'ACTIVO' if services_status.results[1].status.ActiveState == 'active' else 'REVISAR' }}"
+      - "🛡️  Fail2ban: {{ 'ACTIVO' if services_status.results[2].status.ActiveState == 'active' else 'REVISAR' }}"
+      - "📋 Puertos permitidos: SSH(22-red local), HTTP(80), HTTPS(443)"
+      - "🚫 Puertos bloqueados: Telnet(23), FTP(21), SMB(445), RDP(3389)"
+      - "🌐 Red: DHCPv6 con IPv4 fallback configurado"
+  tags:
+    - validacion
+    - resumen
